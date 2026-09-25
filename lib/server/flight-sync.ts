@@ -65,7 +65,7 @@ const errText = (e: unknown) => {
  * TAGO는 같은 날 같은 편명이 시각만 5분쯤 다르게 두 번 오기도 한다(예: OZ8963 15:05/15:10, 2026-09 확인).
  * 어느 쪽이 맞는지 모르므로 더 이른 출발을 남긴다 — 늦게 알려주는 것보다 안전하다.
  */
-function dedupe(records: FlightScheduleRecord[]) {
+export function dedupe(records: FlightScheduleRecord[]) {
   const m = new Map<string, FlightScheduleRecord>();
   for (const r of records) {
     const k = `${r.source}|${r.flight_no}|${r.origin}|${r.dest}|${r.valid_from ?? ''}`;
@@ -168,14 +168,15 @@ export function syncKacFull(admin: SupabaseClient | null, o: FullSyncOpts & { ma
     const base = { job: 'kac-full' as const, ok: true, fetched: records.length, calls, failed: [], note: `${o.today}~${last} (그 뒤 ${KAC_EMPTY_STREAK}일 연속 0건)` };
     if (!records.length) throw new Error('한국공항공사 스케줄이 0건이에요. 기존 데이터를 지우지 않고 멈춥니다.');
     if (o.dryRun || !admin) return { ...base, saved: 0, removed: 0, preview: records.slice(0, 3) };
-    // 대량 삭제 방지: 이번에 받은 편이 지금 DB에 있는 유효 편의 절반도 안 되면 응답 이상으로 보고 지우지 않는다
+    // 대량 삭제 방지: 이번에 받은 편이 지금 DB에 있는 유효 편의 절반도 안 되면 응답 이상으로 본다
     // (2026-09-25 날짜 없는 조회가 2건만 돌려줘 565건이 지워진 사고 이후 추가)
+    // 저장을 먼저 하면 기존 편이 남은 채 새 편만 더해져 그날 추천에 유령 편이 섞인다. 그래서 저장도 함께 건너뛴다.
     const { count: existing } = await admin.from('flight_schedules').select('id', { count: 'exact', head: true })
       .eq('source', KAC_SOURCE).gte('valid_to', o.today);
-    const saved = await upsert(admin, records, runAt);
     if ((existing ?? 0) > 0 && records.length < (existing ?? 0) * MASS_DELETE_RATIO) {
-      return { ...base, ok: false, saved, removed: 0, aborted: `받은 편 ${records.length}건이 기존 ${existing}건의 ${MASS_DELETE_RATIO * 100}% 미만이라 삭제를 건너뜀 (확인 필요)` };
+      return { ...base, ok: false, saved: 0, removed: 0, aborted: `받은 편 ${records.length}건이 기존 ${existing}건의 ${MASS_DELETE_RATIO * 100}% 미만이라 저장·삭제를 건너뜀 (확인 필요)` };
     }
+    const saved = await upsert(admin, records, runAt);
     // 모든 날짜를 문제없이 받았을 때만: 이번에 안 보인 편(운항 종료·변경)은 지운다
     const { error, count } = await admin.from('flight_schedules').delete({ count: 'exact' }).eq('source', KAC_SOURCE).lt('synced_at', runAt);
     if (error) throw error;
@@ -202,20 +203,20 @@ export function syncTagoHorizon(admin: SupabaseClient, o: FullSyncOpts) {
         const recs = await fetchTagoDay({ serviceKey: o.serviceKey, date, origin, dest, fetchImpl: o.fetchImpl });
         report.fetched += recs.length;
         if (!o.dryRun) {
+          const { count: before } = await admin.from('flight_schedules').select('id', { count: 'exact', head: true })
+            .eq('source', TAGO_SOURCE).eq('origin', origin).eq('dest', dest).eq('valid_from', date);
+          // 응답이 의심스러우면 저장도 삭제도 하지 않는다 (저장을 먼저 하면 유령 편이 섞인다).
+          // 조회 기록도 남기지 않아 다음 실행에서 다시 시도한다.
+          if ((before ?? 0) > 0 && recs.length < (before ?? 0) * MASS_DELETE_RATIO) {
+            report.failed.push(`${origin}-${dest} ${date}: 받은 ${recs.length}편, 기존 ${before}편 — 응답이 의심스러워 저장·삭제를 건너뜀`);
+            return;
+          }
           // 주의: `report.saved += await …`는 await 전에 값을 읽어 병렬 실행 시 합계가 틀린다 — 먼저 받아서 더한다
           const saved = recs.length ? await upsert(admin, recs, runAt) : 0;
           report.saved += saved;
-          const stale = admin.from('flight_schedules').select('id', { count: 'exact', head: true })
+          const { count } = await admin.from('flight_schedules').delete({ count: 'exact' })
             .eq('source', TAGO_SOURCE).eq('origin', origin).eq('dest', dest).eq('valid_from', date).lt('synced_at', runAt);
-          const { count: before } = await stale;
-          // 대량 삭제 방지: 그날 편이 있었는데 이번에 절반 넘게 사라졌으면 응답 이상으로 보고 지우지 않는다
-          if ((before ?? 0) > 0 && recs.length < ((before ?? 0) + recs.length) * MASS_DELETE_RATIO) {
-            report.failed.push(`${origin}-${dest} ${date}: 받은 ${recs.length}편, 기존 ${before}편 — 삭제 건너뜀`);
-          } else {
-            const { count } = await admin.from('flight_schedules').delete({ count: 'exact' })
-              .eq('source', TAGO_SOURCE).eq('origin', origin).eq('dest', dest).eq('valid_from', date).lt('synced_at', runAt);
-            report.removed += count ?? 0;
-          }
+          report.removed += count ?? 0;
           await logFetch(admin, TAGO_SOURCE, origin, dest, date, recs.length);
         }
       } catch (e) {
@@ -289,10 +290,20 @@ export async function ensureFresh(admin: SupabaseClient, o: EnsureOpts): Promise
   if (!todo.length) return result;
 
   const runAt = new Date().toISOString();
-  const work = Promise.all(todo.map(async ({ source, origin, dest }) => {
+  // 사용자 한 명이 요청할 때마다 공공데이터포털 일일 쿼터를 태우지 않게 동시 실행 수를 묶는다
+  const work = pool(todo, 4, async ({ source, origin, dest }) => {
     try {
       const q = { serviceKey: o.serviceKey, date: o.date, origin, dest, fetchImpl: o.fetchImpl };
       const recs = source === KAC_SOURCE ? await fetchKacDomestic(q) : await fetchTagoDay(q);
+      if (source === TAGO_SOURCE) {
+        // 주기 전체 동기화와 같은 안전장치: 그날 편이 있었는데 이번 응답이 절반 미만이면 쓰지도 지우지도 않는다
+        const { count: before } = await admin.from('flight_schedules').select('id', { count: 'exact', head: true })
+          .eq('source', TAGO_SOURCE).eq('origin', origin).eq('dest', dest).eq('valid_from', o.date);
+        if ((before ?? 0) > 0 && recs.length < (before ?? 0) * MASS_DELETE_RATIO) {
+          result.errors.push(`${TAGO_SOURCE} ${origin}-${dest}: 받은 ${recs.length}편이 기존 ${before}편의 절반 미만이라 쓰기를 건너뜀`);
+          return;
+        }
+      }
       if (recs.length) await upsert(admin, recs, runAt);
       if (source === TAGO_SOURCE) {
         await admin.from('flight_schedules').delete().eq('source', TAGO_SOURCE).eq('origin', origin).eq('dest', dest).eq('valid_from', o.date).lt('synced_at', runAt);
@@ -303,7 +314,7 @@ export async function ensureFresh(admin: SupabaseClient, o: EnsureOpts): Promise
       result.errors.push(`${source} ${origin}-${dest}: ${errText(e)}`);
       await logFetch(admin, source, origin, dest, o.date, 0, errText(e)).catch(() => {});
     }
-  }));
+  });
   const budget = new Promise<'timeout'>(r => setTimeout(() => r('timeout'), o.budgetMs ?? 8000));
   result.timedOut = (await Promise.race([work.then(() => 'done' as const), budget])) === 'timeout';
   return result;
