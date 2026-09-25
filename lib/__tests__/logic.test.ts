@@ -5,6 +5,7 @@ import { checkClass, checkEvent } from '../onboarding/validate';
 import { layoutLanes } from '../onboarding/lanes';
 import { dayPlan } from '../day';
 import { kstToday, parseDate } from '../time';
+import { dataHealth, type HealthInput } from '../server/data-health';
 
 // 프로토타입(design/공항 찾기 대화.dc.html)과 같은 샘플 값
 const access: AccessTime[] = [
@@ -310,5 +311,53 @@ describe('pendingVisits — 대화 여정과 파일 후보를 한 목록으로',
     expect(pendingVisits([], [cand], [{ dest_city: '부산', visited_on: '2026-06-20' }], today)).toEqual([]);
     expect(pendingVisits([], [{ ...cand, dismissed_at: '2026-09-01T00:00:00Z' }], [], today)).toEqual([]);
     expect(pendingVisits([], [{ ...cand, visited_on: today }], [], today)).toEqual([]);
+  });
+});
+
+describe('dataHealth — 데이터 상태 게이트', () => {
+  const base: HealthInput = {
+    schedules: { total: 10, real: 10, sample: 0, bySource: { KAC: 10 }, coveringToday: 10, lastSyncedAt: '2026-09-25T03:00:00Z', publishedUntil: '2026-10-31' },
+    runs: [{ job: 'kac-full', ok: true, startedAt: new Date(Date.now() - 3600_000).toISOString(), finishedAt: new Date(Date.now() - 3600_000).toISOString(), aborted: null, failed: 0, note: null }],
+    access: { rows: 6, regions: 1, airports: 3, sample: 6 },
+    regions: { active: 250, withCoords: 250 },
+    fetch: { errors: 0, empty: 3 },
+    today: '2026-09-25',
+  };
+  const gate = (i: HealthInput, id: string) => dataHealth(i).gates.find(g => g.id === id)!;
+
+  it('전부 정상이면 종료 코드 0', () => {
+    expect(dataHealth(base).exitCode).toBe(0);
+    expect(dataHealth(base).gates.every(g => g.ok)).toBe(true);
+  });
+  it('실제 스케줄이 0건이면 치명 실패 (화면이 샘플로만 돈다)', () => {
+    const r = dataHealth({ ...base, schedules: { ...base.schedules, real: 0, coveringToday: 0, bySource: {} } });
+    expect(gate({ ...base, schedules: { ...base.schedules, real: 0, coveringToday: 0, bySource: {} } }, 'schedules-real').ok).toBe(false);
+    expect(r.exitCode).toBe(1);
+  });
+  it('스케줄이 오늘 이후를 못 덮으면 실패, 공개 끝을 알려준다', () => {
+    const g = gate({ ...base, schedules: { ...base.schedules, coveringToday: 0, publishedUntil: '2026-09-20' } }, 'schedules-real');
+    expect(g.ok).toBe(false);
+    expect(g.detail).toContain('2026-09-20');
+  });
+  it('성공한 동기화가 30시간을 넘으면 실패, 마지막 실패 이유를 함께 보여준다', () => {
+    const old = new Date(Date.now() - 40 * 3600_000).toISOString();
+    const runs = [
+      { job: 'kac-full', ok: false, startedAt: old, finishedAt: old, aborted: 'SUPABASE_SERVICE_ROLE_KEY에 publishable 키가 들어 있어요.', failed: 0, note: null },
+      { job: 'kac-full', ok: true, startedAt: old, finishedAt: old, aborted: null, failed: 0, note: null },
+    ];
+    const g = gate({ ...base, runs }, 'sync-recent');
+    expect(g.ok).toBe(false);
+    expect(g.detail).toContain('publishable');
+  });
+  it('접근 시간이 없으면 치명 실패 (핵심 계산)', () => {
+    const r = dataHealth({ ...base, access: { rows: 0, regions: 0, airports: 0, sample: 0 } });
+    expect(r.gates.find(g => g.id === 'access-times')!.ok).toBe(false);
+    expect(r.exitCode).toBe(1);
+  });
+  it('좌표가 비면 주의지만 종료 코드는 유지된다', () => {
+    const r = dataHealth({ ...base, regions: { active: 250, withCoords: 3 } });
+    expect(r.gates.find(g => g.id === 'regions-coords')!.ok).toBe(false);
+    expect(r.exitCode).toBe(0);
+    expect(r.gates.find(g => g.id === 'regions-coords')!.headline).toBe('행정구역 좌표 3/250');
   });
 });

@@ -121,3 +121,19 @@ GitHub Actions: `.github/workflows/sync-flights.yml`. 저장소 Settings → Sec
 - 목적지 도시는 클라이언트 문자열을 믿지 않고 공항 코드로 서버가 DB에서 찾는다. 출발일은 오늘 이전·5년 이내만 받는다.
 - 상한: 한 번에 200건, 파일 50MB. 이유는 파일에 없으므로 기록이 된 뒤 이유 칩으로 채운다.
 - 알려진 한계: 환승(예: 김포→제주 경유)은 구분하지 못하고, 경유지·주차장이 공항 반경에 들면 공항 방문으로 잡힐 수 있다. 날짜는 `startTime` 문자열 앞 10자라 UTC로 내보낸 파일은 하루 어긋날 수 있다.
+
+## 데이터 상태 점검 (`npm run doctor`)
+
+동기화가 조용히 실패한 것을 로그를 뒤지지 않고 확인한다. `sync-flights` 워크플로는 **동기화가 실패해도 이 점검을 항상 돌려** "실패했다"가 아니라 "지금 서비스가 어떤 상태인지"를 남긴다(2026-09-25: publishable 키로 1,084건이 RLS에 막힌 실행에서 그 사실이 요약되지 않았다).
+
+게이트 5개 — 치명 게이트가 하나라도 실패하면 종료 코드 1:
+
+| 게이트 | 보는 것 | 치명 |
+|---|---|---|
+| `schedules-real` | 실제(`is_sample=false`) 운항 스케줄 건수와 오늘 이후 커버 | 예 |
+| `sync-recent` | 마지막 성공 동기화가 `SYNC_OK_HOURS`(30시간) 이내 | 예 |
+| `access-times` | 집→공항 접근 시간 행·지역·공항 수 | 예 |
+| `regions-coords` | 유효 행정구역 중 좌표가 채워진 비율 | 아니오 |
+| `fetch-errors` | 최근 24시간 `flight_fetch_log` 오류·0건 | 아니오 |
+
+판정 규칙은 `lib/server/data-health.ts`의 순수 함수이고 테스트가 있다. 조회는 `scripts/doctor.mts`가 service role로 한다.

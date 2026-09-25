@@ -37,3 +37,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+
+      # 동기화가 실패해도 점검은 항상 돌린다. "실패했다"가 아니라 "지금 서비스가 어떤 상태인지"를 남긴다.
+      # (2026-09-25: publishable 키로 1,084건이 RLS에 막힌 실행에서 그 사실이 로그 어디에도 요약되지 않았다)
+      - name: 데이터 상태 점검
+        if: always()
+        continue-on-error: true
+        run: npm run doctor
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
