@@ -35,6 +35,26 @@ export interface JobReport {
   note?: string;
 }
 
+/**
+ * service role 키인지 동기화 전에 확인한다. anon·publishable 키면 DB 쓰기가 RLS에 막혀 모든 노선이 실패하므로
+ * API 호출을 낭비하기 전에 멈춘다. (2026-09-25 GitHub Actions 첫 실행: publishable 키로 42501 1,084건)
+ */
+export async function assertServiceRole(admin: SupabaseClient, key: string): Promise<string | null> {
+  if (key.startsWith('sb_publishable_')) return 'SUPABASE_SERVICE_ROLE_KEY에 publishable 키(sb_publishable_…)가 들어 있어요. secret 키(sb_secret_…)를 넣어주세요.';
+  if (key.startsWith('eyJ')) {
+    try {
+      const role = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role;
+      if (role !== 'service_role') return `SUPABASE_SERVICE_ROLE_KEY가 ${role} 키예요. service_role 또는 secret 키(sb_secret_…)를 넣어주세요.`;
+    } catch { /* 아래 실제 호출로 확인 */ }
+  }
+  // 관리자 API는 service role만 부를 수 있다
+  const { error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1 });
+  return error ? `SUPABASE_SERVICE_ROLE_KEY로 관리자 권한 확인 실패: ${error.message}` : null;
+}
+
+/** DB 권한 오류(RLS 등) — 노선을 바꿔도 똑같이 실패하므로 즉시 멈춘다 */
+const isFatalDbError = (e: unknown) => ['42501', 'PGRST301', 'PGRST302'].includes(String((e as { code?: string })?.code));
+
 const errText = (e: unknown) => {
   const pe = e as { message?: string; code?: string; details?: string };
   return pe?.message ? [pe.message, pe.code, pe.details].filter(Boolean).join(' · ') : String(e);
@@ -200,7 +220,7 @@ export function syncTagoHorizon(admin: SupabaseClient, o: FullSyncOpts) {
         }
       } catch (e) {
         report.failed.push(`${origin}-${dest} ${date}: ${errText(e)}`);
-        if (e instanceof DataGoKrError && FATAL_CODES.has(e.code)) report.aborted = errText(e);
+        if ((e instanceof DataGoKrError && FATAL_CODES.has(e.code)) || isFatalDbError(e)) report.aborted = errText(e);
       }
       const pct = Math.floor((++done / plan.length) * 10) * 10;
       if (pct !== lastPct) { lastPct = pct; o.log?.(`TAGO ${done}/${plan.length}`); }

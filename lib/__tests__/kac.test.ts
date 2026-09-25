@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DataGoKrError, normDate, normTime, parseResponse } from '../data/data-go-kr';
 import { fetchKacByDate, fetchKacDomestic } from '../data/kac-schedule';
 import { fetchTagoDay } from '../data/tago-flights';
-import { addDaysIso, planOnDemand, planTagoDates } from '../server/flight-sync';
+import { addDaysIso, assertServiceRole, planOnDemand, planTagoDates } from '../server/flight-sync';
 import { pickBestSource, type Flight } from '../recommend';
 
 // 실제 응답(2026-09-25 호출)에서 가져온 형태
@@ -189,5 +189,19 @@ describe('redactKey', () => {
     expect(err.message).not.toContain(key);
     expect(err.message).not.toContain(encodeURIComponent(key));
     expect(err.message).toContain('<KEY>');
+  });
+});
+
+describe('assertServiceRole', () => {
+  const fakeAdmin = (error: { message: string } | null) =>
+    ({ auth: { admin: { listUsers: async () => ({ data: null, error }) } } }) as unknown as Parameters<typeof assertServiceRole>[0];
+  const jwt = (role: string) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.sig`;
+  it('publishable·anon 키는 호출 전에 막는다', async () => {
+    expect(await assertServiceRole(fakeAdmin(null), 'sb_publishable_abc')).toContain('publishable');
+    expect(await assertServiceRole(fakeAdmin(null), jwt('anon'))).toContain('anon 키');
+  });
+  it('secret 키는 관리자 API로 확인', async () => {
+    expect(await assertServiceRole(fakeAdmin(null), 'sb_secret_abc')).toBeNull();
+    expect(await assertServiceRole(fakeAdmin({ message: 'Invalid API key' }), 'sb_secret_bad')).toContain('Invalid API key');
   });
 });

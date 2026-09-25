@@ -5,7 +5,7 @@
 //   npm run sync -- kac-full --dry   DB에 쓰지 않고 받기만
 // 필요한 env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DATA_GO_KR_KEY (로컬은 .env.local, Actions는 Secrets)
 import { createClient } from '@supabase/supabase-js';
-import { syncKacFull, syncTagoHorizon, type JobReport, type Trigger } from '../lib/server/flight-sync';
+import { assertServiceRole, syncKacFull, syncTagoHorizon, type JobReport, type Trigger } from '../lib/server/flight-sync';
 
 const need = (k: string) => {
   const v = process.env[k];
@@ -20,7 +20,12 @@ const trigger: Trigger = process.env.GITHUB_EVENT_NAME === 'schedule' ? 'schedul
 // 한국 날짜 기준 "오늘"
 const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
-const admin = createClient(need('NEXT_PUBLIC_SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
+const serviceRoleKey = need('SUPABASE_SERVICE_ROLE_KEY');
+const admin = createClient(need('NEXT_PUBLIC_SUPABASE_URL'), serviceRoleKey, { auth: { persistSession: false } });
+if (!dryRun) {
+  const problem = await assertServiceRole(admin, serviceRoleKey);
+  if (problem) { console.error(`중단: ${problem}`); process.exit(2); }
+}
 const opts = { serviceKey: need('DATA_GO_KR_KEY'), today, trigger, dryRun, log: (m: string) => console.log(`  … ${m}`) };
 
 const print = (r: JobReport) => {
