@@ -1,4 +1,5 @@
 import { fmtDur, hhmm, toMin } from './time';
+import type { Band } from './data/access-bands';
 
 export type Mode = 'car' | 'transit';
 
@@ -14,6 +15,10 @@ export interface AccessTime {
   city?: string | null;
   minutes: number;
   source: string;
+  /** 이 시간이 어느 시각대 기준인지 (access_times.depart_band) */
+  band?: Band;
+  /** 여정의 시각대와 정확히 맞는 행인지. false면 'any'(호출 시점 실시간) 값을 쓴 것 */
+  bandMatched?: boolean;
 }
 
 export interface Flight {
@@ -35,6 +40,9 @@ export interface RecommendRow {
   airportCity: string | null;
   accessMin: number;
   accessSource: string;
+  /** 이동 시간의 시각대. 시각대 데이터가 없어 'any'를 썼으면 bandMatched가 false */
+  accessBand: Band | null;
+  accessBandMatched: boolean;
   flightId: number;
   flightNo: string;
   dep: string;
@@ -81,6 +89,7 @@ export function recommend(
     const dep = hhmm(f.dep_time), arr = hhmm(f.arr_time);
     rows.push({
       airport: a.airport, airportName: a.airportName, airportCity: a.city ?? null, accessMin: a.minutes, accessSource: a.source,
+      accessBand: a.band ?? null, accessBandMatched: a.bandMatched ?? true,
       flightId: f.id, flightNo: f.flight_no, dep, arr,
       slackMin: toMin(dep) - atAirport, totalMin: toMin(arr) - start, isSample: f.is_sample,
       source: f.source ?? '운항 스케줄 DB', syncedAt: f.synced_at ?? null, fare: f.economy_fare ?? null,

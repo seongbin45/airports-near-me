@@ -11,6 +11,7 @@
 // 값을 못 구하면 그 조합은 그냥 비워 두고 `npm run doctor`의 접근시간 게이트가 덮인 비율을 보여준다.
 
 import type { Mode } from '../recommend';
+import { ANY_BAND, toKakaoDepartureTime, type Band } from './access-bands';
 import { httpErrorKind, MapApiError, type ErrorKind } from './map-chain';
 
 export interface LatLng { lat: number; lng: number }
@@ -21,8 +22,14 @@ export interface AccessTimeSource {
   name: string;
   /** 같은 제공자 호출 사이 최소 간격 (공용 서버 정책) */
   minIntervalMs?: number;
-  /** 실패는 던진다. 배치는 조합 단위로 기록하고 계속 진행한다. */
-  minutes(from: LatLng, to: LatLng, departAt: Date): Promise<number>;
+  /**
+   * 출발 시각을 지정해 계산할 수 있는가.
+   * false인 제공자(실시간 전용·도로 속도 기준)는 시각대 배치에 쓰지 않는다 —
+   * "평일 아침"이라며 시간대와 무관한 값을 저장하면 시각대 컬럼이 거짓말을 하게 된다.
+   */
+  supportsDepartureTime?: boolean;
+  /** 실패는 던진다. 배치는 조합 단위로 기록하고 계속 진행한다. departAt이 null이면 출발 시각 미지정 */
+  minutes(from: LatLng, to: LatLng, departAt: Date | null): Promise<number>;
 }
 
 /**
@@ -85,10 +92,37 @@ export function parseKakaoDirections(body: unknown): CarRoute {
   };
 }
 
+/**
+ * 미래 운행 정보 길찾기 — 출발 시각을 지정해 그 시각의 예상 교통으로 계산한다.
+ * GET /v1/future/directions?origin=경도,위도&destination=경도,위도&departure_time=YYYYMMDDHHmm
+ * 응답 형식은 실시간 길찾기와 같다(routes[0].summary.duration 초). 출발 시각은 반드시 현재 이후여야 한다.
+ * (문서 확인: developers.kakaomobility.com/guide/navi-api/future)
+ */
+export function kakaoFutureCarSource(key: string, fetchImpl: typeof fetch = fetch): AccessTimeSource {
+  return {
+    mode: 'car',
+    name: '카카오모빌리티 미래 길찾기',
+    supportsDepartureTime: true,
+    async minutes(from, to, departAt) {
+      if (!departAt) throw new AccessTimeError('미래 길찾기는 출발 시각이 필요해요.', 'FORMAT', false);
+      const qs = new URLSearchParams({
+        origin: `${from.lng},${from.lat}`, destination: `${to.lng},${to.lat}`,
+        departure_time: toKakaoDepartureTime(departAt), priority: 'RECOMMEND', summary: 'true', alternatives: 'false',
+      });
+      const res = await fetchImpl(`https://apis-navi.kakaomobility.com/v1/future/directions?${qs}`, {
+        headers: { Authorization: `KakaoAK ${key}` }, signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) throw httpError('카카오모빌리티 미래 길찾기', res.status, 'KAKAO_REST_KEY');
+      return parseKakaoDirections(await res.json()).minutes;
+    },
+  };
+}
+
 export function kakaoCarSource(key: string, fetchImpl: typeof fetch = fetch): AccessTimeSource {
   return {
     mode: 'car',
     name: '카카오모빌리티 길찾기',
+    supportsDepartureTime: false,
     async minutes(from, to) {
       // origin/destination은 "경도,위도". priority=RECOMMEND(기본), summary=true로 요약만 받는다.
       const qs = new URLSearchParams({
@@ -262,6 +296,11 @@ export function odsayTransitSource(key: string, fetchImpl: typeof fetch = fetch)
   };
 }
 
+export interface SourceOpts {
+  /** 출발 시각을 반영하는 제공자만 (시각대 배치용). 비우면 실시간 제공자 목록 */
+  departuresOnly?: boolean;
+}
+
 export interface SourceEnv {
   KAKAO_REST_KEY?: string;
   TMAP_APP_KEY?: string;
@@ -276,8 +315,13 @@ export interface SourceEnv {
  * 쓸 수 있는 제공자를 우선순위대로. 키가 없는 제공자는 빠진다 (0분으로 채우면 추천이 조용히 틀어진다).
  * 차량은 키가 하나도 없어도 OSRM(키 없음)이 마지막 예비로 남는다 — OSRM_URL=off로 끌 수 있다.
  */
-export function buildAccessTimeSources(env: SourceEnv, fetchImpl: typeof fetch = fetch): AccessTimeSource[] {
+export function buildAccessTimeSources(env: SourceEnv, fetchImpl: typeof fetch = fetch, opts: SourceOpts = {}): AccessTimeSource[] {
   const out: AccessTimeSource[] = [];
+  if (opts.departuresOnly) {
+    // 시각대 배치는 출발 시각을 실제로 반영하는 제공자만 쓴다 (지금은 카카오 미래 길찾기뿐)
+    if (env.KAKAO_REST_KEY) out.push(kakaoFutureCarSource(env.KAKAO_REST_KEY, fetchImpl));
+    return out;
+  }
   if (env.KAKAO_REST_KEY) out.push(kakaoCarSource(env.KAKAO_REST_KEY, fetchImpl));
   if (env.TMAP_APP_KEY) out.push(tmapCarSource(env.TMAP_APP_KEY, fetchImpl));
   if (env.NAVER_MAP_CLIENT_ID && env.NAVER_MAP_CLIENT_SECRET) {
@@ -305,14 +349,21 @@ export function airportZone(code: string): Zone {
 
 // ───────────── 배치 대상 선정 (순수 함수) ─────────────
 
-export interface PlanRow { region_id: number; airport: string; mode: Mode }
-export interface ExistingRow { region_id: number; airport: string; mode: string; fetched_at: string; is_sample: boolean }
+export interface PlanRow { region_id: number; airport: string; mode: Mode; band: Band }
+export interface ExistingRow {
+  region_id: number; airport: string; mode: string;
+  /** access_times.depart_band. 없으면 'any'로 본다 (컬럼 추가 전 행) */
+  depart_band?: string | null;
+  fetched_at: string; is_sample: boolean;
+}
 
 export interface PlanInput {
   /** zone이 있으면 같은 권역의 공항만 계산한다 (제주 ↔ 육지는 길이 없다) */
   regions: { id: number; lat: number | null; lng: number | null; zone?: Zone }[];
   airports: { code: string; lat: number | null; lng: number | null; zone?: Zone }[];
   modes: Mode[];
+  /** 계산할 시각대. 비우면 ['any'] (출발 시각 미지정 = 기존 동작) */
+  bands?: Band[];
   existing: ExistingRow[];
   /** 실측 행을 이 일수 안에 받았으면 다시 묻지 않는다 */
   refreshDays: number;
@@ -343,24 +394,28 @@ export interface PlanOut {
 export function planAccessTimes(i: PlanInput): PlanOut {
   const regions = i.regions.filter(r => r.lat != null && r.lng != null);
   const airports = i.airports.filter(a => a.lat != null && a.lng != null);
+  const bands = i.bands?.length ? i.bands : [ANY_BAND];
   const freshBefore = i.now.getTime() - i.refreshDays * 86400_000;
 
-  const existing = new Map(i.existing.map(e => [`${e.region_id}|${e.airport}|${e.mode}`, e]));
+  const existing = new Map(i.existing.map(e => [`${e.region_id}|${e.airport}|${e.mode}|${e.depart_band ?? ANY_BAND}`, e]));
   const todo: PlanRow[] = [];
   let fresh = 0, unreachable = 0;
-  const withCoords = regions.length * airports.length * i.modes.length;
-  const noCoords = i.regions.length * i.airports.length * i.modes.length - withCoords;
+  const slots = bands.length;
+  const withCoords = regions.length * airports.length * i.modes.length * slots;
+  const noCoords = i.regions.length * i.airports.length * i.modes.length * slots - withCoords;
 
   for (const r of regions) {
     for (const a of airports) {
-      if (r.zone && a.zone && r.zone !== a.zone) { unreachable += i.modes.length; continue; }
+      if (r.zone && a.zone && r.zone !== a.zone) { unreachable += i.modes.length * slots; continue; }
       for (const mode of i.modes) {
-        const row = existing.get(`${r.id}|${a.code}|${mode}`);
-        if (row && !row.is_sample && Date.parse(row.fetched_at) >= freshBefore) { fresh++; continue; }
-        todo.push({ region_id: r.id, airport: a.code, mode });
+        for (const band of bands) {
+          const row = existing.get(`${r.id}|${a.code}|${mode}|${band}`);
+          if (row && !row.is_sample && Date.parse(row.fetched_at) >= freshBefore) { fresh++; continue; }
+          todo.push({ region_id: r.id, airport: a.code, mode, band });
+        }
       }
     }
   }
-  todo.sort((x, y) => x.region_id - y.region_id || x.airport.localeCompare(y.airport) || x.mode.localeCompare(y.mode));
+  todo.sort((x, y) => x.region_id - y.region_id || x.airport.localeCompare(y.airport) || x.mode.localeCompare(y.mode) || x.band.localeCompare(y.band));
   return { todo: todo.slice(0, i.limit), noCoords, fresh, candidateTotal: withCoords - unreachable, unreachable };
 }

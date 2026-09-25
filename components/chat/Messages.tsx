@@ -1,5 +1,6 @@
 import { Badge, SampleTag } from '@/components/ui';
 import { DOMESTIC_BUFFER_MIN, MODE_LABEL, STALE_DAYS, type Mode, type Recommendation, type RecommendRow } from '@/lib/recommend';
+import { bandTitle } from '@/lib/data/access-bands';
 import { fmtDur } from '@/lib/time';
 import type { DayItem } from '@/lib/day';
 
@@ -129,12 +130,20 @@ function Results({ result, dest, departure, mode }: { result: NonNullable<Props[
             </div>
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2">
-            <Tile label={`집 → 공항 · ${MODE_LABEL[mode]}`} value={fmtDur(r.accessMin)} src={r.accessSource} />
+            <Tile label={`집 → 공항 · ${MODE_LABEL[mode]}`} value={fmtDur(r.accessMin)}
+              src={r.accessBand ? `${r.accessSource} · ${bandTitle(r.accessBand)}` : r.accessSource} />
             <Tile label={`탑승 편 · ${r.flightNo}`} value={`${r.dep} → ${r.arr}`} {...scheduleSrc(r)} />
             <Tile label="공항 도착 여유" value={fmtDur(r.slackMin)} src={`국내선 ${DOMESTIC_BUFFER_MIN}분 전 기준`} />
           </div>
         </div>
       ))}
+      {result.rows.some(r => !r.accessBandMatched) && (
+        <div className="px-1 text-xs leading-normal text-warn text-pretty">
+          출발 시각대에 맞는 이동 시간이 아직 없어, 호출 시점의 실시간 교통으로 계산한 값을 썼어요
+          ({result.rows.find(r => !r.accessBandMatched)?.accessBand ?? 'any'}).
+          같은 시각대 값을 채우려면 <span className="font-semibold">npm run access-times -- --bands weekday_am,weekday_day,weekday_pm,weekend</span> 를 돌리세요.
+        </div>
+      )}
       {excluded.map(t => <div key={t} className="px-1 text-xs text-muted">{t}</div>)}
     </div>
   );

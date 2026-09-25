@@ -5,6 +5,7 @@ import { dayPlan } from '../day';
 import { createAdminClient } from '../supabase/admin';
 import { ensureFresh, type EnsureResult } from './flight-sync';
 import { weekdayKo } from '../time';
+import { bandFor, bandsForLookup } from '../data/access-bands';
 
 export interface TripInput {
   dest: string;
@@ -37,15 +38,26 @@ export async function loadRecommendation(supabase: SupabaseClient, userId: strin
   const { data: profile, error } = await supabase.from('profiles').select('region_id').eq('id', userId).single();
   if (error) throw error;
 
+  // 여정의 날짜·출발 시각이 속한 시각대. 그 시각대 행이 없으면 'any'(호출 시점 실시간)로 물러선다.
+  const band = bandFor(t.date, t.departure);
   const [access, destAirports] = await Promise.all([
-    supabase.from('access_times').select('airport, minutes, source, airports(name_ko, city)').eq('region_id', profile.region_id ?? -1).eq('mode', t.mode),
+    supabase.from('access_times').select('airport, minutes, source, depart_band, airports(name_ko, city)')
+      .eq('region_id', profile.region_id ?? -1).eq('mode', t.mode).in('depart_band', bandsForLookup(band)),
     supabase.from('airports').select('code').eq('city', t.dest),
   ]);
   if (access.error) throw access.error;
   if (destAirports.error) throw destAirports.error;
 
+  // 같은 공항에 시각대 행과 'any' 행이 함께 오면 시각대 행을 쓴다 (행 순서에 기대지 않는다)
+  const byAirport = new Map<string, (typeof access.data)[number]>();
+  for (const row of access.data) {
+    const cur = byAirport.get(row.airport);
+    if (!cur || (row.depart_band === band && cur.depart_band !== band)) byAirport.set(row.airport, row);
+  }
+  const accessRows = [...byAirport.values()];
+
   // 사용자가 고른 날짜·노선이 DB에 없으면 지금 API로 불러와 저장한 뒤 추천한다 (실패·시간 초과면 DB에 있는 것으로)
-  const onDemand = await fillOnDemand(access.data.map(a => a.airport), destAirports.data.map(a => a.code), t.date);
+  const onDemand = await fillOnDemand(accessRows.map(a => a.airport), destAirports.data.map(a => a.code), t.date);
 
   // 공개된 정기 스케줄의 마지막 날 — 그 뒤 날짜는 "아직 공개 전"으로 안내
   const { data: until } = await supabase.from('flight_schedules').select('valid_to')
@@ -59,8 +71,9 @@ export async function loadRecommendation(supabase: SupabaseClient, userId: strin
   if (flights.error) throw flights.error;
   const inSeason = flights.data.filter(f => (!f.valid_from || f.valid_from <= t.date) && (!f.valid_to || f.valid_to >= t.date));
 
-  const accessTimes: AccessTime[] = access.data.map(a => ({
+  const accessTimes: AccessTime[] = accessRows.map(a => ({
     airport: a.airport, minutes: a.minutes, source: a.source,
+    band: a.depart_band as AccessTime['band'], bandMatched: a.depart_band === band,
     airportName: (a.airports as unknown as { name_ko: string; city: string } | null)?.name_ko.replace('국제공항', '') ?? a.airport,
     city: (a.airports as unknown as { name_ko: string; city: string } | null)?.city ?? null,
   }));

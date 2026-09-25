@@ -62,8 +62,8 @@ const runs: RunStats[] = (runErr ? [] : runRows ?? []).map(r => {
 });
 
 // ── 접근 시간 / 행정구역 (전부 받아야 하는 곳은 페이지로 나눠 받는다)
-const accessRefs = await fetchAllRows<{ region_id: number; airport: string; mode: string; source: string; is_sample: boolean }>(
-  (f, t) => admin.from('access_times').select('region_id, airport, mode, source, is_sample').order('id').range(f, t));
+const accessRefs = await fetchAllRows<{ region_id: number; airport: string; mode: string; source: string; depart_band: string | null; is_sample: boolean }>(
+  (f, t) => admin.from('access_times').select('region_id, airport, mode, source, depart_band, is_sample').order('id').range(f, t));
 const access = {
   rows: accessRefs.length,
   regions: new Set(accessRefs.map(a => a.region_id)).size,
@@ -95,6 +95,12 @@ const byMode = (m: string) => accessRefs.filter(a => a.mode === m);
 console.log(`
 접근 시간 출처 — 차량: ${tally(byMode('car').map(a => a.source)) || '없음'} / 대중교통: ${tally(byMode('transit').map(a => a.source)) || '없음'}`);
 console.log(`행정구역 좌표 출처: ${tally(regionRows.filter(r => r.lat != null).map(r => r.geocode_source)) || '없음'}`);
+console.log(`이동 시간 시각대: ${tally(accessRefs.map(a => a.depart_band ?? 'any')) || '없음'}`);
+const noBand = accessRefs.filter(a => (a.depart_band ?? 'any') === 'any' && !a.is_sample).length;
+if (noBand === accessRefs.filter(a => !a.is_sample).length && noBand > 0) {
+  console.log('  ※ 실측이 전부 "any"(호출 시점 실시간)예요. 시각대별 값이 없으면 추천은 그 값을 그대로 쓰고 화면에 그 사실을 표시해요.');
+  console.log('    npm run access-times -- --bands weekday_am,weekday_day,weekday_pm,weekend');
+}
 if (process.env.GITHUB_STEP_SUMMARY) {
   const { appendFileSync } = await import('node:fs');
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### 데이터 상태 점검\n\n${gates.map(g => `- ${g.ok ? '✅' : g.critical ? '❌' : '⚠️'} **${g.id}** — ${g.headline}${g.ok ? '' : `\n  - ${g.detail}`}`).join('\n')}\n`);
