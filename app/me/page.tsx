@@ -18,7 +18,7 @@ export default async function MePage() {
     supabase.from('class_timetable').select('name, days, start_time, end_time'),
     supabase.from('schedules').select('date, description, source'),
     supabase.from('visits').select('id, trip_id, dest_city, visited_on, reason, from_airport, source, is_sample').order('visited_on', { ascending: false }),
-    supabase.from('ai_calls').select('id, kind, prompt, verified, verify_detail, provider, model, created_at, trips(dest_city, trip_date)').order('created_at', { ascending: false }).limit(50),
+    supabase.from('ai_calls').select('id, kind, prompt, verified, verify_detail, provider, model, served_model, created_at, trips(dest_city, trip_date)').order('created_at', { ascending: false }).limit(50),
     supabase.from('location_consents').select('id').is('revoked_at', null).limit(1),
     supabase.from('access_times').select('airport, mode, minutes, is_sample, airports(name_ko)').eq('region_id', profile.region_id ?? -1),
     // 확인 대기: 날짜가 지난 내 여정. 여기서 판단해 클라이언트에는 결과만 넘긴다.
@@ -61,7 +61,11 @@ export default async function MePage() {
 }
 
 export interface AiCallRow {
-  id: number; kind: string; prompt: string; verified: boolean; created_at: string; provider: string | null; model: string | null;
+  id: number; kind: string; prompt: string; verified: boolean; created_at: string; provider: string | null;
+  /** 체인에서 고른(요청한) 모델 */
+  model: string | null;
+  /** 실제로 답한 모델. 서버 측 폴백·모델 라우팅이 일어나면 model과 다르다 */
+  served_model: string | null;
   verify_detail: (Partial<VerifyDetail> & { refused?: boolean; parseError?: boolean; unavailable?: boolean }) | null;
   trips: { dest_city: string; trip_date: string } | null;
 }

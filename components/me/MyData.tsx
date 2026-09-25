@@ -40,6 +40,11 @@ type Tab = (typeof TABS)[number][0];
 const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
 /** 타임라인 내보내기 파일 상한. 이보다 큰 파일을 JSON.parse하면 브라우저가 멈춘다 */
 const MAX_TIMELINE_BYTES = 50 * 1024 * 1024;
+/** 어느 모델이 답했는지 한 줄로. 서버 측 폴백이 일어나면 요청 모델과 다르므로 그때는 화살표로 보여준다. */
+function modelNote(c: AiCallRow) {
+  if (!c.served_model) return c.model ? ` · ${c.model}` : '';
+  return c.served_model === c.model ? ` · ${c.served_model}` : ` · ${c.model ?? '?'} → ${c.served_model} 대체`;
+}
 // 가입 화면의 단계 번호 (수정 링크용)
 const STEP = { home: 1, type: 2, schedule: 3 };
 
@@ -368,7 +373,7 @@ export default function MyData(p: Props) {
                         </span>
                       </div>
                       <div className="text-xs text-muted tabular-nums">
-                        {new Date(c.created_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}{c.provider ? ` · ${PROVIDER_LABEL[c.provider as ProviderId] ?? c.provider}` : ''} · {detail}
+                        {new Date(c.created_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}{c.provider ? ` · ${PROVIDER_LABEL[c.provider as ProviderId] ?? c.provider}` : ''}{modelNote(c)} · {detail}
                       </div>
                     </div>
                   );
