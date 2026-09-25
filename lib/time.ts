@@ -33,6 +33,11 @@ export function weekdayKo(iso: string): string {
   return WEEK[new Date(y, m - 1, d).getDay()];
 }
 
+/** 한국 날짜 기준 오늘("YYYY-MM-DD"). 서버 시간대와 무관하게 KST로 계산한다 (국내선 대상 서비스). */
+export function kstToday(now = new Date()): string {
+  return new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
 export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

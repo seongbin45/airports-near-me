@@ -4,7 +4,7 @@ import { verifyAgainstDb } from '../ai/verify';
 import { checkClass, checkEvent } from '../onboarding/validate';
 import { layoutLanes } from '../onboarding/lanes';
 import { dayPlan } from '../day';
-import { parseDate } from '../time';
+import { kstToday, parseDate } from '../time';
 
 // 프로토타입(design/공항 찾기 대화.dc.html)과 같은 샘플 값
 const access: AccessTime[] = [
@@ -138,6 +138,7 @@ describe('parseDate', () => {
 });
 
 import { checkReason, parseTime, reasonCrossCheck, sameReason } from '../chat/flow';
+import { confirmableError, pendingFromTrips, visitFromTrip, type TripRow } from '../visits';
 
 describe('chat flow', () => {
   const visits = [
@@ -190,5 +191,60 @@ describe('checkReason', () => {
     expect(checkReason('6만원 이하로')).toContain('금액');
     expect(checkReason('010-1234-5678로 연락')).toContain('금액');
     expect(checkReason('가'.repeat(61))).toContain('60자');
+  });
+});
+
+
+describe('pendingFromTrips — 방문 기록으로 넘길 지난 여정', () => {
+  const trip = (over: Partial<TripRow> = {}): TripRow => ({
+    id: 1, dest_city: '제주', trip_date: '2026-09-20', reason: '출장', chosen_origin: 'GMP',
+    chosen_flight_no: 'OZ8901', visit_dismissed_at: null, ...over,
+  });
+  const today = '2026-09-25';
+  it('날짜가 지난 여정만 확인 대기로 올린다', () => {
+    expect(pendingFromTrips([trip(), trip({ id: 2, trip_date: today }), trip({ id: 3, trip_date: '2026-10-01' })], [], today).map(t => t.id))
+      .toEqual([1]);
+  });
+  it('공항을 고르지 못한 여정과 "안 갔어요"로 지운 여정은 뺀다', () => {
+    expect(pendingFromTrips([trip({ chosen_origin: null })], [], today)).toEqual([]);
+    expect(pendingFromTrips([trip({ visit_dismissed_at: '2026-09-24T00:00:00Z' })], [], today)).toEqual([]);
+  });
+  it('이미 기록이 있는 날은 다시 묻지 않는다', () => {
+    expect(pendingFromTrips([trip()], [{ dest_city: '제주', visited_on: '2026-09-20' }], today)).toEqual([]);
+  });
+  it('같은 날 같은 목적지를 두 번 검색했으면 대표 한 건만', () => {
+    const out = pendingFromTrips([trip({ id: 1 }), trip({ id: 2 })], [], today);
+    expect(out.map(t => t.id)).toEqual([2]);
+  });
+  it('최신 날짜부터 정렬', () => {
+    const out = pendingFromTrips([trip({ id: 1, trip_date: '2026-09-01' }), trip({ id: 2, trip_date: '2026-09-20', dest_city: '부산' })], [], today);
+    expect(out.map(t => t.id)).toEqual([2, 1]);
+  });
+});
+
+describe('visitFromTrip', () => {
+  const t: TripRow = { id: 7, dest_city: '제주', trip_date: '2026-09-20', reason: '출장', chosen_origin: 'GMP', chosen_flight_no: 'OZ8901' };
+  it('값은 여정 행에서만 가져온다', () => {
+    expect(visitFromTrip(t)).toEqual({ trip_id: 7, dest_city: '제주', visited_on: '2026-09-20', reason: '출장', from_airport: 'GMP', source: 'trip' });
+  });
+  it('이유를 따로 주면 그 값을 쓴다 (공백뿐이면 여정 이유)', () => {
+    expect(visitFromTrip(t, '현장 강의 수강').reason).toBe('현장 강의 수강');
+    expect(visitFromTrip(t, '   ').reason).toBe('출장');
+  });
+});
+
+describe('confirmableError', () => {
+  const base: TripRow = { id: 1, dest_city: '제주', trip_date: '2026-09-20', reason: '출장', chosen_origin: 'GMP' };
+  it('오늘·미래 여정과 공항 없는 여정은 확인할 수 없다', () => {
+    expect(confirmableError(base, '2026-09-25')).toBeNull();
+    expect(confirmableError({ ...base, trip_date: '2026-09-25' }, '2026-09-25')).toContain('지나지 않은');
+    expect(confirmableError({ ...base, chosen_origin: null }, '2026-09-25')).toContain('공항');
+  });
+});
+
+describe('kstToday', () => {
+  it('서버 시간대와 무관하게 한국 날짜', () => {
+    expect(kstToday(new Date('2026-09-25T14:59:59Z'))).toBe('2026-09-25');
+    expect(kstToday(new Date('2026-09-25T15:00:00Z'))).toBe('2026-09-26');
   });
 });

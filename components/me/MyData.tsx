@@ -9,8 +9,9 @@ import { DEFAULT_REASONS } from '@/lib/chat/flow';
 import { fmtDur, hhmm, toMin } from '@/lib/time';
 import type { AccessRow, AiCallRow } from '@/app/me/page';
 import { PROVIDER_LABEL, type ProviderId } from '@/lib/ai/providers-meta';
+import type { TripRow } from '@/lib/visits';
 
-interface Visit { id: number; dest_city: string; visited_on: string; reason: string | null; from_airport: string | null; source: string; is_sample: boolean }
+interface Visit { id: number; trip_id: number | null; dest_city: string; visited_on: string; reason: string | null; from_airport: string | null; source: string; is_sample: boolean }
 
 interface Props {
   email: string;
@@ -24,6 +25,8 @@ interface Props {
   classes: { name: string; days: string[]; start_time: string; end_time: string }[];
   events: { date: string; description: string; source: string }[];
   visits: Visit[];
+  /** 날짜가 지난 여정 중 아직 방문 기록으로 넘기지 않은 것 (확인 대기) */
+  pending: TripRow[];
   aiCalls: AiCallRow[];
   hasConsent: boolean;
   access: AccessRow[];
@@ -31,7 +34,7 @@ interface Props {
 
 const TABS = [['basic', '기본 정보'], ['trips', '방문 기록'], ['ai', 'AI 기록'], ['privacy', '개인정보']] as const;
 type Tab = (typeof TABS)[number][0];
-const SOURCE: Record<string, string> = { manual: '직접 입력', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
+const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
 // 가입 화면의 단계 번호 (수정 링크용)
 const STEP = { home: 1, type: 2, schedule: 3 };
 
@@ -50,6 +53,7 @@ export default function MyData(p: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [tab, setTab] = useState<Tab>('basic');
   const [visits, setVisits] = useState(p.visits);
+  const [pending, setPending] = useState(p.pending);
   const [filter, setFilter] = useState('전체');
   const [consent, setConsent] = useState(p.hasConsent);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
@@ -80,12 +84,30 @@ export default function MyData(p: Props) {
   const reasons = [...new Set(visits.map(v => v.reason).filter(Boolean) as string[])].slice(0, 3);
   const shown = visits.filter(v => filter === '전체' || (filter === '이유 미입력' ? !v.reason : v.reason === filter));
 
+  // 방문 기록 쓰기는 /api/visits 한 곳으로 모은다 (이유 검증, 확인 대기 정리, 중복 방지가 서버에 있다)
+  async function visitApi(body: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    const res = await fetch('/api/visits', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) { setErr(json.error ?? '요청에 실패했어요.'); return null; }
+    return json;
+  }
+  async function confirmTrip(t: TripRow) {
+    const json = await visitApi({ action: 'confirm', tripId: t.id });
+    if (!json) return;
+    const v = json.visit as Visit;
+    setVisits(vs => [v, ...vs.filter(x => x.id !== v.id)]);
+    setPending(ps => ps.filter(x => x.id !== t.id));
+  }
+  async function dismissTrip(t: TripRow) {
+    if (!await visitApi({ action: 'dismiss', tripId: t.id })) return;
+    setPending(ps => ps.filter(x => x.id !== t.id));
+  }
   async function setReason(id: number, reason: string) {
-    if (fail((await supabase.from('visits').update({ reason }).eq('id', id)).error)) return;
+    if (!await visitApi({ action: 'set_reason', visitId: id, reason })) return;
     setVisits(vs => vs.map(v => v.id === id ? { ...v, reason } : v));
   }
   async function removeVisit(id: number) {
-    if (fail((await supabase.from('visits').delete().eq('id', id)).error)) return;
+    if (!await visitApi({ action: 'delete', visitId: id })) return;
     setVisits(vs => vs.filter(v => v.id !== id));
   }
 
@@ -199,9 +221,34 @@ export default function MyData(p: Props) {
           {tab === 'trips' && (
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between gap-2">
-                <div className="min-w-0 flex-1 truncate text-[13px] text-ink-2">공항 방문 {visits.length}회 · 이유 입력 {visits.filter(v => v.reason).length}회</div>
+                <div className="min-w-0 flex-1 truncate text-[13px] text-ink-2">
+                  공항 방문 {visits.length}회 · 이유 입력 {visits.filter(v => v.reason).length}회
+                  {pending.length ? ` · 확인 대기 ${pending.length}건` : ''}
+                </div>
                 {visits.some(v => v.is_sample) && <span className="flex-none"><SampleTag /></span>}
               </div>
+              {!!pending.length && (
+                <div className="flex flex-col gap-2.5">
+                  <div className="text-[13px] leading-normal text-ink-2 text-pretty">
+                    다녀오신 여정이 있는데 아직 기록으로 남기지 않았어요. 확인하면 다음 추천에서 지난 방문으로 써요.
+                  </div>
+                  {pending.map(t => (
+                    <div key={t.id} className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex min-w-0 flex-1 items-center gap-2 text-[15px] font-bold">
+                          <span>{t.chosen_origin ?? '?'}</span><span className="font-normal text-faint">→</span><span>{t.dest_city}</span>
+                        </div>
+                        <div className="flex-none text-xs text-muted tabular-nums">{dot(t.trip_date)}</div>
+                      </div>
+                      <div><span className="rounded-[10px] bg-chip px-2.5 py-0.5 text-xs font-semibold text-ink-2">{t.reason}</span></div>
+                      <div className="flex gap-2">
+                        <button onClick={() => confirmTrip(t)} className="min-h-10 flex-1 rounded-full bg-accent text-[13px] font-semibold text-white">다녀왔어요</button>
+                        <button onClick={() => dismissTrip(t)} className="min-h-10 flex-1 rounded-full border border-line-strong bg-surface text-[13px] font-semibold text-ink-2">안 갔어요</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 {['전체', '이유 미입력', ...reasons].map(f => (
                   <button key={f} onClick={() => setFilter(f)} className={`min-h-9 rounded-full px-3 text-[13px] font-semibold ${pill(filter === f)}`}>{f}</button>
