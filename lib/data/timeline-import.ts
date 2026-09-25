@@ -1,10 +1,18 @@
-// 구글 지도 타임라인 내보내기 파일(Timeline.json, 2024년 이후 기기 저장 형식) 파싱.
-// 방문 이유는 파일에 없으므로, 찾아낸 여정을 확인 대기로 넘기고 사용자가 이유를 채운다.
+// 구글 지도 타임라인 내보내기 파일(Timeline.json / location-history.json) 파싱.
 //
-// 이 파일은 브라우저에서만 쓴다 — 파일을 서버로 올리지 않는다. 여기 있는 건 순수 함수뿐이라 테스트한다.
+// 구글은 서로 다른 세 가지 형식을 내보낸다. 이 파일은 셋 다 받는다.
+//   1) 휴대폰 내보내기   — { semanticSegments[], rawSignals[], userLocationProfile }
+//      좌표는 "50.0506312, 14.3439906" 같은 문자열(때로 geo: 접두사나 ° 기호가 붙는다).
+//      startTimeTimezoneUtcOffsetMinutes가 있어 현지 날짜를 정확히 알 수 있다.
+//   2) Takeout 시맨틱     — { timelineObjects[] } 의 placeVisit/activitySegment.
+//      좌표는 E7 정수(latitudeE7 = 도 × 10^7).
+//   3) 위 둘이 섞인 배열 변형 — 항목이 visit.topCandidate 또는 activity.start를 가진 배열.
+//
+// 방문 이유는 파일에 없으므로, 찾아낸 여정을 확인 대기로 넘기고 사용자가 채운다.
+// 이 파일은 브라우저에서만 쓴다 — 파일을 서버로 올리지 않는다. 순수 함수뿐이라 테스트한다.
 //
 // 한계 (추정이므로 확인 대기로만 넘긴다):
-//  - 공항 반경 2.5km 안에 든 지점을 "공항에 있었다"로 본다. 경유지·주차장도 걸릴 수 있다.
+//  - 공항 반경 AIRPORT_RADIUS_KM 안에 든 지점을 "공항에 있었다"로 본다. 정확도가 나쁜 지점은 버린다.
 //  - 여정은 연속한 공항 방문에서 추정한다: 다른 공항으로 옮긴 구간이 여정, 그 뒤 원래 공항으로
 //    돌아온 구간이 귀국. 국내선 기준으로 같은 여정의 출발·도착은 MAX_HOP_DAYS 안에 있다고 본다.
 //  - 도착 공항의 도시를 방문 도시로 본다. 환승(예: 김포→제주)은 구분하지 못한다.
@@ -39,16 +47,28 @@ export const AIRPORT_RADIUS_KM = 2.5;
 export const MAX_HOP_DAYS = 2;
 /** 도착지에서 출발 공항으로 돌아온 것을 같은 여정의 귀국으로 보는 최대 날짜 차이 */
 export const MAX_STAY_DAYS = 30;
+/** 정확도가 이보다 나쁜 지점은 공항 판정에 쓰지 않는다 (기지국 측위는 km 단위로 틀린다) */
+export const MAX_ACCURACY_M = 500;
+/** 시각에 시간대가 없을 때 현지 날짜 계산에 쓰는 기준 (국내선 대상 서비스) */
+export const FALLBACK_UTC_OFFSET_MIN = 9 * 60;
 
-interface Segment {
-  startTime?: string;
-  visit?: { topCandidate?: { placeLocation?: { latLng?: string } } };
+/** "geo:37.558,126.790" / "37.558°, 126.790°" / "50.0506312, 14.3439906" → [37.558, 126.79] */
+export function parseLatLng(s: string): [number, number] | null {
+  const t = s.replace(/^geo:/i, '').replace(/[°]/g, '');
+  const m = t.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const lat = Number(m[1]), lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return [lat, lng];
 }
 
-/** "35.1795°, 128.9382°" → [35.1795, 128.9382] */
-export function parseLatLng(s: string): [number, number] | null {
-  const m = s.match(/(-?\d+(?:\.\d+)?)°?,\s*(-?\d+(?:\.\d+)?)°?/);
-  return m ? [+m[1], +m[2]] : null;
+/** E7 정수 좌표(도 × 10^7) → 도 */
+export function fromE7(latE7: unknown, lngE7: unknown): [number, number] | null {
+  if (typeof latE7 !== 'number' || typeof lngE7 !== 'number') return null;
+  const lat = latE7 / 1e7, lng = lngE7 / 1e7;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return [lat, lng];
 }
 
 function km(a: [number, number], b: [number, number]) {
@@ -63,22 +83,151 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((d(b) - d(a)) / 86400_000);
 }
 
-function segmentsOf(json: unknown): Segment[] {
-  const raw = (json as { semanticSegments?: unknown })?.semanticSegments;
-  return Array.isArray(raw) ? (raw as Segment[]) : [];
+/**
+ * ISO 시각을 현지 날짜("YYYY-MM-DD")로.
+ *  - 오프셋이 주어지면(휴대폰 내보내기의 startTimeTimezoneUtcOffsetMinutes) 그것으로,
+ *  - 시각 문자열 자체에 +09:00 같은 오프셋이 있으면 그대로,
+ *  - UTC(Z)거나 오프셋이 없으면 한국 시간으로 본다.
+ * 문자열을 그냥 잘라 쓰면 UTC로 내보낸 파일에서 하루가 어긋난다.
+ */
+export function localDate(iso: string, offsetMinutes?: number | null): string | null {
+  if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(iso)) return null;
+  const t = Date.parse(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
+  if (Number.isNaN(t)) return null;
+  const explicit = /([+-])(\d{2}):?(\d{2})$/.exec(iso);
+  const off = typeof offsetMinutes === 'number' ? offsetMinutes
+    : explicit ? (explicit[1] === '-' ? -1 : 1) * (Number(explicit[2]) * 60 + Number(explicit[3]))
+    : FALLBACK_UTC_OFFSET_MIN;
+  return new Date(t + off * 60_000).toISOString().slice(0, 10);
 }
 
-/** semanticSegments의 방문 지점을 시간순으로. */
+const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
+const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+interface RawPoint { at: string | null; lat: number; lng: number }
+
+/** 한 형식의 항목에서 (시각, 좌표)를 뽑아낸다. 못 뽑으면 null. */
+function pointFromLatLng(latLng: unknown, at: string | null): RawPoint | null {
+  const s = str(latLng);
+  if (!s) return null;
+  const p = parseLatLng(s);
+  return p ? { at, lat: p[0], lng: p[1] } : null;
+}
+
+function pointsFromSemanticSegments(segments: unknown[]): RawPoint[] {
+  const out: RawPoint[] = [];
+  for (const raw of segments) {
+    const s = obj(raw);
+    if (!s) continue;
+    const start = str(s.startTime), end = str(s.endTime);
+
+    // 1) 방문 (휴대폰 내보내기)
+    const visit = obj(s.visit);
+    const top = obj(visit?.topCandidate);
+    const place = obj(top?.placeLocation);
+    const visitPoint = pointFromLatLng(place?.latLng, start);
+    if (visitPoint) out.push(visitPoint);
+    // 주 후보에 좌표가 없으면 다른 후보를 쓴다 (구글도 이렇게 한다)
+    if (!visitPoint) {
+      for (const alt of arr(visit?.otherCandidateLocations)) {
+        const altPoint = pointFromLatLng(obj(alt)?.placeLocation && obj(obj(alt)?.placeLocation)?.latLng, start);
+        if (altPoint) { out.push(altPoint); break; }
+      }
+    }
+
+    // 2) 이동 경로의 지점들
+    for (const p of arr(s.timelinePath)) {
+      const o = obj(p);
+      const q = pointFromLatLng(o?.point, str(o?.time) ?? start);
+      if (q) out.push(q);
+    }
+
+    // 3) 이동 구간의 시작·끝 (방문 기록이 없는 이동만 있는 파일도 있다)
+    const activity = obj(s.activity);
+    for (const [key, at] of [['start', start], ['end', end]] as const) {
+      const leg = obj(activity?.[key]);
+      const q = pointFromLatLng(leg?.latLng, at);
+      if (q) out.push(q);
+    }
+  }
+  return out;
+}
+
+function pointsFromTimelineObjects(objects: unknown[]): RawPoint[] {
+  const out: RawPoint[] = [];
+  for (const raw of objects) {
+    const o = obj(raw);
+    if (!o) continue;
+    // Takeout 시맨틱: E7 정수 좌표
+    const visit = obj(o.placeVisit);
+    if (visit) {
+      const loc = obj(visit.location);
+      const p = fromE7(loc?.latitudeE7, loc?.longitudeE7) ?? fromE7(loc?.centerLatE7, loc?.centerLngE7);
+      const at = str(obj(visit.duration)?.startTimestamp);
+      if (p) out.push({ at, lat: p[0], lng: p[1] });
+      continue;
+    }
+    const seg = obj(o.activitySegment);
+    if (seg) {
+      for (const [key, atKey] of [['startLocation', 'startTimestamp'], ['endLocation', 'endTimestamp']] as const) {
+        const loc = obj(seg[key]);
+        const p = fromE7(loc?.latitudeE7, loc?.longitudeE7);
+        const at = str(obj(seg.duration)?.[atKey]);
+        if (p) out.push({ at, lat: p[0], lng: p[1] });
+      }
+    }
+  }
+  return out;
+}
+
+function pointsFromRawSignals(signals: unknown[]): RawPoint[] {
+  const out: RawPoint[] = [];
+  for (const raw of signals) {
+    const o = obj(raw);
+    const pos = obj(o?.position);
+    if (!pos) continue;
+    const accuracy = num(pos.accuracyMeters);
+    if (accuracy != null && accuracy > MAX_ACCURACY_M) continue; // 기지국 측위는 공항 판정에 쓸 수 없다
+    const q = pointFromLatLng(pos.LatLng ?? pos.latLng, str(pos.timestamp));
+    if (q) out.push(q);
+  }
+  return out;
+}
+
+/** 어떤 형식의 파일인지 알아내 방문 지점을 뽑는다. 시각이 있는 지점만, 시간순. */
 export function parseTimelinePoints(json: unknown): TimelinePoint[] {
-  const segments = segmentsOf(json);
-  if (!segments.length) throw new Error('타임라인 형식이 아니에요. 휴대폰에서 내보낸 Timeline.json을 올려주세요.');
+  const root = obj(json);
+  const segments = arr(root?.semanticSegments);
+  const signals = arr(root?.rawSignals);
+  const objects = arr(root?.timelineObjects);
+  const legacyArray = arr(json);
+
+  let raws: RawPoint[];
+  if (segments.length) raws = pointsFromSemanticSegments(segments);
+  else if (signals.length) raws = pointsFromRawSignals(signals);
+  else if (objects.length) raws = pointsFromTimelineObjects(objects);
+  else if (legacyArray.length) raws = pointsFromSemanticSegments(legacyArray);
+  else throw new Error('타임라인 형식이 아니에요. 휴대폰에서 내보낸 Timeline.json이나 구글 Takeout의 위치 기록 파일을 올려주세요.');
+
+  const offsets = new Map<string, number | null>();
+  for (const raw of segments) {
+    const s = obj(raw);
+    const t = str(s?.startTime);
+    if (t) offsets.set(t, num(s?.startTimeTimezoneUtcOffsetMinutes));
+  }
+
+  const seen = new Set<string>();
   const out: TimelinePoint[] = [];
-  for (const s of segments) {
-    const ll = s.visit?.topCandidate?.placeLocation?.latLng;
-    if (!ll || !s.startTime) continue;
-    const p = parseLatLng(ll);
-    if (!p) continue;
-    out.push({ at: s.startTime, date: s.startTime.slice(0, 10), lat: p[0], lng: p[1] });
+  for (const r of raws) {
+    if (!r.at) continue;
+    const date = localDate(r.at, offsets.get(r.at) ?? null);
+    if (!date) continue;
+    const key = `${r.at}|${r.lat.toFixed(5)}|${r.lng.toFixed(5)}`;
+    if (seen.has(key)) continue; // timelinePath와 activity가 같은 지점을 두 번 준다
+    seen.add(key);
+    out.push({ at: r.at, date, lat: r.lat, lng: r.lng });
   }
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
