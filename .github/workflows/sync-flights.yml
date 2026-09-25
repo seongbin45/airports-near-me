@@ -1,0 +1,39 @@
+# 운항 스케줄 주기 전체 동기화
+# - 매일 03:00 KST: 한국공항공사(오늘부터 공개된 끝까지 날짜별 전 노선) → TAGO(노선별 스케줄 끝까지 날짜별)
+# - Actions 탭에서 수동 실행 가능 (job 선택)
+# 필요한 저장소 Secrets: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DATA_GO_KR_KEY
+# 실행 결과는 Supabase sync_runs 테이블과 이 워크플로 로그에 남는다.
+name: sync-flights
+
+on:
+  schedule:
+    - cron: '0 18 * * *'   # UTC 18:00 = KST 03:00
+  workflow_dispatch:
+    inputs:
+      job:
+        description: '실행할 동기화'
+        type: choice
+        options: [all, kac-full, tago-horizon]
+        default: all
+
+concurrency:
+  group: sync-flights
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 동기화
+        run: npm run sync -- ${{ inputs.job || 'all' }}
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}

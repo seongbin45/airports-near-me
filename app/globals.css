@@ -1,26 +1,47 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 프로토타입(design/*.dc.html)의 밝은 웜 톤 */
+@theme {
+  --font-sans: Pretendard, -apple-system, system-ui, sans-serif;
+
+  --color-bg: #f6f1ea;
+  --color-bar: #fbf8f4;
+  --color-surface: #fffdfa;
+  --color-line: #ece3d8;
+  --color-line-strong: #e2d8cc;
+  --color-divider: #f1eae1;
+  --color-sand: #efe7dc;
+  --color-chip: #f3ece3;
+  --color-tile: #f7f2eb;
+
+  --color-ink: #2b2622;
+  --color-ink-2: #5d544c;
+  --color-muted: #7a7067;
+  --color-faint: #9a9087;
+  --color-disabled: #c9bfb3;
+
+  --color-accent: #2f62c4;
+  --color-accent-ink: #1f4a9c;
+  --color-accent-soft: #e8eefa;
+  --color-ai: #8a4fb0;
+  --color-ok: #2e7d4f;
+  --color-ok-soft: #e6f2ea;
+  --color-warn: #9a5a1e;
+  --color-warn-soft: #fbeedd;
+  --color-danger: #b0472a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html, body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+input::placeholder { color: #b0a598; }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+.pt-safe { padding-top: calc(env(safe-area-inset-top) + 12px); }
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }

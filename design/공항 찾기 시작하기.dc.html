@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+input::placeholder{color:#b0a598}
+</style>
+</helmet>
+<div style="min-height:100dvh;display:flex;flex-direction:column;background:#f6f1ea">
+  <header style="flex:none;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 12px) 20px 12px;border-bottom:1px solid #e8dfd4;background:#fbf8f4">
+    <div style="width:36px;height:36px;border-radius:12px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px">공</div>
+    <div style="font-weight:700;font-size:16px;flex:1">공항 찾기 시작하기</div>
+    <div style="font-size:13px;color:#7a7067;white-space:nowrap">{{ stepNo }} / {{ stepTotal }}</div>
+  </header>
+  <div style="height:4px;background:#ebe2d6">
+    <div style="height:4px;background:#2f62c4;width:{{ progress }};transition:width .3s"></div>
+  </div>
+
+  <main style="flex:1;padding:28px 16px 24px;display:flex;justify-content:center">
+    <div style="width:100%;max-width:640px;display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="flex:none;width:30px;height:30px;border-radius:10px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">공</div>
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+          <div style="background:#fffdfa;border:1px solid #ece3d8;padding:12px 16px;border-radius:4px 18px 18px 18px;font-size:16px;line-height:1.55;font-weight:600;text-wrap:pretty">{{ title }}</div>
+          <div style="font-size:13px;color:#7a7067;line-height:1.5;padding-left:4px;text-wrap:pretty">{{ sub }}</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isCountry }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ countries }}" as="c" hint-placeholder-count="4">
+            <button onClick="{{ c.onClick }}" disabled="{{ c.locked }}" style="min-height:60px;display:flex;align-items:center;gap:12px;padding:0 18px;border-radius:16px;border:{{ c.border }};background:{{ c.bg }};font:inherit;text-align:left;cursor:{{ c.cursor }};color:{{ c.color }}">
+              <div style="width:40px;font-size:13px;font-weight:700;letter-spacing:.04em">{{ c.code }}</div>
+              <div style="flex:1;font-size:15px;font-weight:600">{{ c.name }}</div>
+              <div style="font-size:12px;color:{{ c.noteColor }}">{{ c.note }}</div>
+            </button>
+          </sc-for>
+          <div style="font-size:12px;color:#7a7067;line-height:1.5;text-wrap:pretty">다른 국가는 서비스가 안정화된 뒤 관리자 승인을 거쳐 순서대로 열립니다.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input value="{{ q }}" onChange="{{ onQ }}" placeholder="동네 이름으로 찾기 (예: 영통, 해운대, 서귀포)" style="min-height:50px;padding:0 18px;border-radius:25px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+            <sc-if value="{{ hasQ }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;overflow:hidden">
+                <sc-for list="{{ qResults }}" as="r" hint-placeholder-count="4">
+                  <button onClick="{{ r.onClick }}" style="min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px;border:none;border-top:{{ r.divider }};background:transparent;font:inherit;font-size:14px;color:#2b2622;text-align:left;cursor:pointer">
+                    <div style="font-weight:600">{{ r.label }}</div>
+                    <div style="font-size:12px;color:#7a7067;flex:none">{{ r.sido }}</div>
+                  </button>
+                </sc-for>
+                <sc-if value="{{ noQ }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:14px 16px;font-size:13px;color:#7a7067">일치하는 시·군·구가 없어요.</div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:13px;font-weight:600;color:#5d544c">시·도 <span style="font-weight:400;color:#9a9087">16개 중 선택</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ sidos }}" as="s" hint-placeholder-count="16">
+                <button onClick="{{ s.onClick }}" style="min-height:44px;padding:0 14px;border-radius:22px;border:{{ s.border }};background:{{ s.bg }};color:{{ s.color }};font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ s.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <sc-if value="{{ hasSggs }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:13px;font-weight:600;color:#5d544c">{{ sidoFull }} · 시·군·구 <span style="font-weight:400;color:#9a9087">{{ sggCount }}곳</span></div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{ sggs }}" as="s" hint-placeholder-count="8">
+                  <button onClick="{{ s.onClick }}" style="min-height:44px;padding:0 14px;border-radius:22px;border:{{ s.border }};background:{{ s.bg }};color:{{ s.color }};font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ s.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasGus }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:13px;font-weight:600;color:#5d544c">{{ sgg }} · 구</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{ gus }}" as="s" hint-placeholder-count="4">
+                  <button onClick="{{ s.onClick }}" style="min-height:44px;padding:0 14px;border-radius:22px;border:{{ s.border }};background:{{ s.bg }};color:{{ s.color }};font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ s.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:13px;font-weight:600;color:#5d544c">상세 주소 <span style="font-weight:400;color:#9a9087">선택 · 공항까지 시간이 더 정확해져요</span></div>
+            <input value="{{ addr }}" onChange="{{ onAddr }}" placeholder="예: 영통로 200" style="min-height:48px;padding:0 16px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:4px;background:#efe7dc;border-radius:14px;padding:12px 14px">
+            <div style="font-size:15px;font-weight:700;color:{{ homeColor }}">{{ homeLabel }}</div>
+            <div style="font-size:11px;color:#7a7067">행정안전부 행정구역 기준 · 2026년 9월 (인천 구 개편, 전남광주통합특별시, 화성시 4개 구 반영)</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isType }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+          <sc-for list="{{ types }}" as="t" hint-placeholder-count="4">
+            <button onClick="{{ t.onClick }}" style="min-height:76px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;padding:12px 18px;border-radius:16px;border:{{ t.border }};background:{{ t.bg }};font:inherit;text-align:left;cursor:pointer;color:#2b2622">
+              <div style="font-size:15px;font-weight:700">{{ t.label }}</div>
+              <div style="font-size:12px;color:#7a7067">{{ t.desc }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isSchedule }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:12px 14px">
+            <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:14px;font-weight:600">캘린더에서 한 번에 불러오기</div>
+              <div style="font-size:12px;color:#7a7067;line-height:1.5">{{ importNote }}</div>
+            </div>
+            <button onClick="{{ onImport }}" disabled="{{ imported }}" style="flex:none;min-height:44px;padding:0 16px;border-radius:22px;border:1px solid #e2d8cc;background:{{ importBg }};color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ importLabel }}</button>
+          </div>
+
+          <sc-if value="{{ showTabs }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;gap:6px;background:#efe7dc;padding:4px;border-radius:14px;align-self:flex-start">
+              <sc-for list="{{ schedTabs }}" as="o" hint-placeholder-count="2">
+                <button onClick="{{ o.onClick }}" style="min-height:40px;padding:0 16px;border-radius:11px;border:none;background:{{ o.bg }};color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer;box-shadow:{{ o.shadow }};white-space:nowrap">{{ o.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showClasses }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:12px;overflow-x:auto">
+                <div style="display:grid;grid-template-columns:40px repeat(5,minmax(52px,1fr));gap:6px 4px;min-width:320px">
+                  <div></div>
+                  <sc-for list="{{ days }}" as="d" hint-placeholder-count="5">
+                    <div style="text-align:center;font-size:12px;font-weight:700;color:#7a7067">{{ d }}</div>
+                  </sc-for>
+                  <div style="position:relative;height:440px">
+                    <sc-for list="{{ hourLabels }}" as="h" hint-placeholder-count="11">
+                      <div style="position:absolute;top:{{ h.top }};right:6px;transform:translateY(-50%);font-size:10px;color:#9a9087;font-variant-numeric:tabular-nums">{{ h.label }}</div>
+                    </sc-for>
+                  </div>
+                  <sc-for list="{{ cols }}" as="col" hint-placeholder-count="5">
+                    <div style="position:relative;height:440px;border-radius:10px;background-color:#faf6f0;background-image:repeating-linear-gradient(to bottom,#efe7dc 0,#efe7dc 1px,transparent 1px,transparent 44px)">
+                      <sc-for list="{{ col.blocks }}" as="b" hint-placeholder-count="1">
+                        <button onClick="{{ b.onClick }}" style="position:absolute;left:{{ b.left }};width:{{ b.width }};top:{{ b.top }};height:{{ b.height }};border-radius:8px;border:{{ b.border }};background:{{ b.bg }};color:{{ b.ink }};padding:4px 6px;text-align:left;font:inherit;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;gap:1px">
+                          <div style="font-size:12px;font-weight:700;line-height:1.25">{{ b.name }}</div>
+                          <div style="font-size:10px;font-variant-numeric:tabular-nums;opacity:.85">{{ b.time }}</div>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                  <div style="font-size:15px;font-weight:700">{{ cfTitle }}</div>
+                  <sc-if value="{{ cfEditing }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ cfCancel }}" style="min-height:36px;padding:0 12px;border-radius:18px;border:none;background:#f3ece3;color:#5d544c;font:inherit;font-size:13px;cursor:pointer">새 수업으로</button>
+                  </sc-if>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+                  <input value="{{ cfName }}" onChange="{{ onCfName }}" placeholder="과목명 (필수)" style="min-height:48px;padding:0 14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                  <input value="{{ cfPlace }}" onChange="{{ onCfPlace }}" placeholder="강의실 (선택)" style="min-height:48px;padding:0 14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="font-size:12px;font-weight:600;color:#5d544c">요일 · 여러 개 선택</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <sc-for list="{{ cfDays }}" as="d" hint-placeholder-count="6">
+                      <button onClick="{{ d.onClick }}" style="width:48px;height:44px;border-radius:12px;border:{{ d.border }};background:{{ d.bg }};color:{{ d.color }};font:inherit;font-size:14px;font-weight:700;cursor:pointer">{{ d.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="font-size:12px;font-weight:600;color:#5d544c">시간 · 자주 쓰는 시간을 누르거나 직접 입력</div>
+                  <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none">
+                    <sc-for list="{{ presets }}" as="p" hint-placeholder-count="6">
+                      <button onClick="{{ p.onClick }}" style="flex:none;min-height:40px;padding:0 12px;border-radius:20px;border:{{ p.border }};background:{{ p.bg }};color:{{ p.color }};font:inherit;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;white-space:nowrap">{{ p.label }}</button>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <input type="time" step="300" value="{{ cfStart }}" onChange="{{ onCfStart }}" style="flex:1;min-width:0;min-height:48px;padding:0 12px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                    <div style="color:#9a9087">–</div>
+                    <input type="time" step="300" value="{{ cfEnd }}" onChange="{{ onCfEnd }}" style="flex:1;min-width:0;min-height:48px;padding:0 12px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                  </div>
+                </div>
+                <sc-if value="{{ cfMsg }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px;color:{{ cfMsgColor }};line-height:1.5">{{ cfMsg }}</div>
+                </sc-if>
+                <div style="display:flex;gap:8px">
+                  <sc-if value="{{ cfEditing }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ cfDelete }}" style="flex:none;min-height:48px;padding:0 18px;border-radius:24px;border:1px solid #e9c9bd;background:#fffdfa;color:#b0472a;font:inherit;font-size:14px;font-weight:600;cursor:pointer">삭제</button>
+                  </sc-if>
+                  <button onClick="{{ cfSave }}" disabled="{{ cfDisabled }}" style="flex:1;min-height:48px;border-radius:24px;border:none;background:{{ cfBtnBg }};color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer">{{ cfBtnLabel }}</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showEvents }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px">
+                <div style="font-size:15px;font-weight:700">일정 추가</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="font-size:12px;font-weight:600;color:#5d544c">종류</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <sc-for list="{{ efKinds }}" as="k" hint-placeholder-count="5">
+                      <button onClick="{{ k.onClick }}" style="min-height:40px;padding:0 14px;border-radius:20px;border:{{ k.border }};background:{{ k.bg }};color:{{ k.color }};font:inherit;font-size:13px;font-weight:600;cursor:pointer">{{ k.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="font-size:12px;font-weight:600;color:#5d544c">날짜 (필수)</div>
+                  <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none">
+                    <sc-for list="{{ dateChips }}" as="c" hint-placeholder-count="5">
+                      <button onClick="{{ c.onClick }}" style="flex:none;min-height:40px;padding:0 12px;border-radius:20px;border:{{ c.border }};background:{{ c.bg }};color:{{ c.color }};font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">{{ c.label }}</button>
+                    </sc-for>
+                  </div>
+                  <input type="date" value="{{ efDate }}" onChange="{{ onEfDate }}" style="min-height:48px;padding:0 12px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                    <div style="font-size:12px;font-weight:600;color:#5d544c">시간 (필수)</div>
+                    <button onClick="{{ toggleAllDay }}" style="min-height:36px;display:flex;align-items:center;gap:8px;padding:0 4px;border:none;background:transparent;font:inherit;font-size:13px;color:#5d544c;cursor:pointer">
+                      <div style="width:36px;height:22px;border-radius:11px;background:{{ adTrack }};position:relative">
+                        <div style="position:absolute;top:2px;left:{{ adKnob }};width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)"></div>
+                      </div>
+                      하루 종일
+                    </button>
+                  </div>
+                  <sc-if value="{{ showTimes }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <input type="time" step="300" value="{{ efStart }}" onChange="{{ onEfStart }}" style="flex:1;min-width:0;min-height:48px;padding:0 12px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                      <div style="color:#9a9087">–</div>
+                      <input type="time" step="300" value="{{ efEnd }}" onChange="{{ onEfEnd }}" style="flex:1;min-width:0;min-height:48px;padding:0 12px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="font-size:12px;font-weight:600;color:#5d544c">설명 (필수)</div>
+                  <input value="{{ efDesc }}" onChange="{{ onEfDesc }}" placeholder="{{ efDescPh }}" style="min-height:48px;padding:0 14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                </div>
+                <sc-if value="{{ efMsg }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px;color:#9a5a1e;line-height:1.5">{{ efMsg }}</div>
+                </sc-if>
+                <button onClick="{{ efSave }}" disabled="{{ efDisabled }}" style="min-height:48px;border-radius:24px;border:none;background:{{ efBtnBg }};color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer">일정 추가</button>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="font-size:13px;font-weight:600;color:#5d544c">다가오는 일정 {{ eventCount }}개</div>
+                <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px">
+                  <sc-for list="{{ events }}" as="e" hint-placeholder-count="2">
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 14px;border-top:{{ e.divider }}">
+                      <div style="flex:none;width:76px;display:flex;flex-direction:column;gap:2px">
+                        <div style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums">{{ e.dateLabel }}</div>
+                        <div style="font-size:11px;color:#7a7067;font-variant-numeric:tabular-nums">{{ e.timeLabel }}</div>
+                      </div>
+                      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                        <div style="font-size:14px;font-weight:600">{{ e.desc }}</div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap">
+                          <div style="font-size:11px;color:#5d544c;background:#f3ece3;padding:2px 8px;border-radius:8px">{{ e.kind }}</div>
+                          <div style="font-size:11px;color:#7a7067;background:#f3ece3;padding:2px 8px;border-radius:8px">{{ e.src }}</div>
+                        </div>
+                      </div>
+                      <button onClick="{{ e.onRemove }}" style="flex:none;min-height:36px;padding:0 10px;border-radius:10px;border:none;background:transparent;color:#9a9087;font:inherit;font-size:12px;cursor:pointer">삭제</button>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ noEvents }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:14px;font-size:13px;color:#9a9087">아직 일정이 없어요.</div>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:6px;background:#efe7dc;padding:4px;border-radius:14px;align-self:flex-start">
+            <sc-for list="{{ osTabs }}" as="o" hint-placeholder-count="2">
+              <button onClick="{{ o.onClick }}" style="min-height:40px;padding:0 18px;border-radius:11px;border:none;background:{{ o.bg }};color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer;box-shadow:{{ o.shadow }}">{{ o.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px">
+            <sc-for list="{{ osSteps }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;gap:12px;align-items:flex-start;padding:14px;border-top:{{ s.divider }}">
+                <div style="flex:none;width:24px;height:24px;border-radius:50%;background:#e8eefa;color:#2f62c4;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ s.n }}</div>
+                <div style="font-size:14px;line-height:1.55;text-wrap:pretty">{{ s.text }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;color:#7a7067;line-height:1.5;text-wrap:pretty">구글 타임라인은 2024년부터 휴대폰에만 저장돼요. PC의 Takeout에서는 대부분 내보낼 수 없어요.</div>
+          <sc-if value="{{ notUploaded }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ onUpload }}" style="min-height:96px;border-radius:16px;border:1.5px dashed #cdbfae;background:#fbf7f1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:inherit;cursor:pointer;color:#2b2622">
+              <div style="font-size:15px;font-weight:600">타임라인 파일 올리기</div>
+              <div style="font-size:12px;color:#7a7067">Timeline.json · 휴대폰에서 바로 선택할 수 있어요</div>
+            </button>
+          </sc-if>
+          <sc-if value="{{ uploaded }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+                <div style="font-size:14px;font-weight:700">Timeline.json 읽기 완료</div>
+                <div style="font-size:11px;color:#9a5a1e;background:#fbeedd;padding:3px 8px;border-radius:8px">화면용 샘플 데이터</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                <sc-for list="{{ parsed }}" as="p" hint-placeholder-count="3">
+                  <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px">
+                    <div style="font-size:18px;font-weight:700;font-variant-numeric:tabular-nums">{{ p.v }}</div>
+                    <div style="font-size:11px;color:#7a7067">{{ p.k }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:13px;line-height:1.5;color:#5d544c;text-wrap:pretty">방문 이유는 파일에 없어요. 대화에서 공항 방문 7회의 이유를 하나씩 여쭤볼게요.</div>
+            </div>
+          </sc-if>
+          <button onClick="{{ toggleConsent }}" style="display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;text-align:left;cursor:pointer;color:#2b2622">
+            <div style="flex:none;width:22px;height:22px;border-radius:7px;border:{{ consentBorder }};background:{{ consentBg }};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ consentMark }}</div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="font-size:14px;font-weight:600">위치정보 수집·이용 동의 (필수)</div>
+              <div style="font-size:12px;color:#7a7067;line-height:1.5">방문 기록은 공항 추천에만 쓰고, 계정 설정에서 언제든 지울 수 있어요.</div>
+            </div>
+          </button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px">
+          <sc-for list="{{ summary }}" as="f" hint-placeholder-count="6">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:13px 16px;border-top:{{ f.divider }}">
+              <div style="font-size:13px;color:#7a7067;flex:none">{{ f.k }}</div>
+              <div style="font-size:14px;font-weight:600;text-align:right">{{ f.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <a href="공항 찾기 대화.dc.html" style="min-height:52px;border-radius:26px;background:#2f62c4;color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;text-decoration:none">대화로 공항 찾기</a>
+      </sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
+    <footer style="flex:none;position:sticky;bottom:0;border-top:1px solid #e8dfd4;background:#fbf8f4;padding:12px 16px calc(env(safe-area-inset-bottom) + 12px);display:flex;justify-content:center">
+      <div style="width:100%;max-width:640px;display:flex;gap:10px">
+        <button onClick="{{ onBack }}" style="flex:none;min-height:52px;padding:0 20px;border-radius:26px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:15px;font-weight:600;cursor:pointer;visibility:{{ backVis }}">이전</button>
+        <sc-if value="{{ canSkip }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ onSkip }}" style="flex:none;min-height:52px;padding:0 18px;border-radius:26px;border:none;background:transparent;color:#7a7067;font:inherit;font-size:14px;cursor:pointer">나중에 하기</button>
+        </sc-if>
+        <button onClick="{{ onNext }}" disabled="{{ nextDisabled }}" style="flex:1;min-height:52px;border-radius:26px;border:none;background:{{ nextBg }};color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:{{ nextCursor }}">{{ nextLabel }}</button>
+      </div>
+    </footer>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const REGIONS = [
+  ['서울', '서울특별시', '종로구,중구,용산구,성동구,광진구,동대문구,중랑구,성북구,강북구,도봉구,노원구,은평구,서대문구,마포구,양천구,강서구,구로구,금천구,영등포구,동작구,관악구,서초구,강남구,송파구,강동구'],
+  ['부산', '부산광역시', '중구,서구,동구,영도구,부산진구,동래구,남구,북구,해운대구,사하구,금정구,강서구,연제구,수영구,사상구,기장군'],
+  ['대구', '대구광역시', '중구,동구,서구,남구,북구,수성구,달서구,달성군,군위군'],
+  ['인천', '인천광역시', '제물포구,영종구,미추홀구,연수구,남동구,부평구,계양구,서해구,검단구,강화군,옹진군'],
+  ['대전', '대전광역시', '동구,중구,서구,유성구,대덕구'],
+  ['울산', '울산광역시', '중구,남구,동구,북구,울주군'],
+  ['세종', '세종특별자치시', ''],
+  ['경기', '경기도', '수원시(장안구/권선구/팔달구/영통구),성남시(수정구/중원구/분당구),의정부시,안양시(만안구/동안구),부천시(원미구/소사구/오정구),광명시,평택시,동두천시,안산시(상록구/단원구),고양시(덕양구/일산동구/일산서구),과천시,구리시,남양주시,오산시,시흥시,군포시,의왕시,하남시,용인시(처인구/기흥구/수지구),파주시,이천시,안성시,김포시,화성시(만세구/효행구/병점구/동탄구),광주시,양주시,포천시,여주시,연천군,가평군,양평군'],
+  ['강원', '강원특별자치도', '춘천시,원주시,강릉시,동해시,태백시,속초시,삼척시,홍천군,횡성군,영월군,평창군,정선군,철원군,화천군,양구군,인제군,고성군,양양군'],
+  ['충북', '충청북도', '청주시(상당구/서원구/흥덕구/청원구),충주시,제천시,보은군,옥천군,영동군,증평군,진천군,괴산군,음성군,단양군'],
+  ['충남', '충청남도', '천안시(동남구/서북구),공주시,보령시,아산시,서산시,논산시,계룡시,당진시,금산군,부여군,서천군,청양군,홍성군,예산군,태안군'],
+  ['전북', '전북특별자치도', '전주시(완산구/덕진구),군산시,익산시,정읍시,남원시,김제시,완주군,진안군,무주군,장수군,임실군,순창군,고창군,부안군'],
+  ['전남광주', '전남광주통합특별시', '동구,서구,남구,북구,광산구,목포시,여수시,순천시,나주시,광양시,담양군,곡성군,구례군,고흥군,보성군,화순군,장흥군,강진군,해남군,영암군,무안군,함평군,영광군,장성군,완도군,진도군,신안군'],
+  ['경북', '경상북도', '포항시(남구/북구),경주시,김천시,안동시,구미시,영주시,영천시,상주시,문경시,경산시,의성군,청송군,영양군,영덕군,청도군,고령군,성주군,칠곡군,예천군,봉화군,울진군,울릉군'],
+  ['경남', '경상남도', '창원시(의창구/성산구/마산합포구/마산회원구/진해구),진주시,통영시,사천시,김해시,밀양시,거제시,양산시,의령군,함안군,창녕군,고성군,남해군,하동군,산청군,함양군,거창군,합천군'],
+  ['제주', '제주특별자치도', '제주시,서귀포시']
+].map(([short, full, raw]) => ({ short, full, sggs: raw ? raw.split(',').map(x => { const m = x.match(/^(.+?)\((.+)\)$/); return m ? { name: m[1], gus: m[2].split('/') } : { name: x, gus: [] }; }) : [] }));
+
+const DAYS = ['월', '화', '수', '목', '금', '토'];
+const TINTS = [['#dfe8f8', '#1f4a9c'], ['#f6e1cf', '#8a4617'], ['#e0efe0', '#2d6a3a'], ['#eee0f2', '#6b3a80'], ['#f4ebc9', '#735c12'], ['#f5dddd', '#8f3434']];
+const HOUR0 = 9, HOURS = 10, PX = 44;
+
+class Component extends DCLogic {
+  state = { step: 0, country: 'KR', sido: '경기', sgg: '수원시', gu: '영통구', addr: '', q: '', type: null,
+    tab: 'classes', nid: 10,
+    classes: [
+      { id: 1, name: '운영체제', place: '공학관 301', days: ['월', '수'], start: '09:00', end: '10:15' },
+      { id: 2, name: '데이터베이스', place: '공학관 204', days: ['화', '목'], start: '13:00', end: '14:15' },
+      { id: 3, name: '캡스톤디자인', place: '', days: ['금'], start: '10:30', end: '12:45' }
+    ],
+    cf: { id: null, name: '', place: '', days: [], start: '', end: '' }, cfNote: '',
+    events: [{ id: 5, kind: '회의', date: '2026-10-02', start: '13:00', end: '14:30', allDay: false, desc: '캡스톤 팀 회의', src: '직접 입력' }],
+    ef: { kind: '약속', date: '', start: '', end: '', allDay: false, desc: '' }, efTouched: false, imported: false,
+    os: 'android', uploaded: false, consent: false, skipped: {} };
+
+  steps = ['country', 'home', 'type', 'schedule', 'history', 'done'];
+
+  pill(on) { return { border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#2b2622' }; }
+  mins(t) { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+  iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  fmtDate(s) { const [y, m, d] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${m}/${d}(${'일월화수목금토'[dt.getDay()]})`; }
+  setCf(p) { this.setState(s => ({ cf: { ...s.cf, ...p }, cfNote: '' })); }
+  setEf(p) { this.setState(s => ({ ef: { ...s.ef, ...p } })); }
+
+  classCheck() {
+    const { cf, classes } = this.state, miss = [];
+    if (!cf.name.trim()) miss.push('과목명');
+    if (!cf.days.length) miss.push('요일');
+    if (!cf.start || !cf.end) miss.push('시간');
+    if (miss.length) return { ok: false, msg: `${miss.join(', ')}을(를) 입력하면 저장할 수 있어요.`, color: '#7a7067' };
+    const a = this.mins(cf.start), b = this.mins(cf.end);
+    if (b <= a) return { ok: false, msg: '끝나는 시간이 시작 시간보다 늦어야 해요.', color: '#b0472a' };
+    const clash = classes.find(c => c.id !== cf.id && c.days.some(d => cf.days.includes(d)) && this.mins(c.start) < b && a < this.mins(c.end));
+    if (clash) return { ok: true, msg: `${clash.name}(${clash.start}–${clash.end})과 시간이 겹쳐요. 그래도 저장할 수 있어요.`, color: '#9a5a1e' };
+    return { ok: true, msg: '', color: '#7a7067' };
+  }
+
+  eventCheck() {
+    const { ef } = this.state, miss = [];
+    if (!ef.date) miss.push('날짜');
+    if (!ef.allDay && (!ef.start || !ef.end)) miss.push('시간');
+    if (!ef.desc.trim()) miss.push('설명');
+    if (miss.length) return { ok: false, msg: `${miss.join(', ')}이(가) 필요해요.` };
+    if (!ef.allDay && this.mins(ef.end) <= this.mins(ef.start)) return { ok: false, msg: '끝나는 시간이 시작 시간보다 늦어야 해요.' };
+    return { ok: true, msg: '' };
+  }
+
+  renderVals() {
+    const s = this.state, key = this.steps[s.step], set = p => this.setState(p);
+    const isStudent = s.type === '대학생';
+    const region = REGIONS.find(r => r.short === s.sido);
+    const sggObj = region && region.sggs.find(x => x.name === s.sgg);
+    const homeDone = region && (!region.sggs.length || (sggObj && (!sggObj.gus.length || s.gu)));
+    const homeLabel = region ? [region.full, s.sgg, s.gu].filter(Boolean).join(' ') + (s.addr ? ' ' + s.addr : '') : '시·도를 골라주세요';
+
+    const q = s.q.trim();
+    let qResults = [];
+    if (q) {
+      REGIONS.forEach(r => {
+        if (!r.sggs.length && r.full.includes(q)) qResults.push({ label: r.full, sido: '', pick: { sido: r.short, sgg: '', gu: '' } });
+        r.sggs.forEach(g => {
+          if (g.gus.length) g.gus.forEach(u => { if ((g.name + u).includes(q) || u.includes(q)) qResults.push({ label: `${g.name} ${u}`, sido: r.full, pick: { sido: r.short, sgg: g.name, gu: u } }); });
+          else if (g.name.includes(q)) qResults.push({ label: g.name, sido: r.full, pick: { sido: r.short, sgg: g.name, gu: '' } });
+        });
+      });
+      qResults = qResults.slice(0, 8).map((r, i) => ({ ...r, divider: i ? '1px solid #f1eae1' : 'none', onClick: () => set({ ...r.pick, q: '' }) }));
+    }
+
+    const TITLES = {
+      country: ['어느 나라에서 이용하시나요?', '지금은 대한민국 국내선만 안내할 수 있어요.'],
+      home: ['어디에 사세요?', '공항까지 걸리는 시간을 계산하는 기준이 돼요. 동네 이름으로 찾거나 차례로 골라주세요.'],
+      type: ['어떤 일정을 주로 챙기시나요?', '고른 유형에 맞춰 시간표나 일정 입력 칸을 보여드려요.'],
+      schedule: [isStudent ? '수업 시간표와 일정을 알려주세요.' : '다가오는 일정을 알려주세요.', '출발 가능한 시각을 계산할 때 이 일정과 겹치지 않는지 확인해요.'],
+      history: ['지난 방문 기록을 가져올까요?', '어디를 왜 다녀왔는지 알면 다음 추천이 정확해져요. 휴대폰에서 파일을 내보내 올려주세요.'],
+      done: ['준비됐어요, 민지님.', '입력하신 내용은 계정에 저장되고 대화에서 불러와 씁니다.']
+    };
+
+    const tab = isStudent ? s.tab : 'events';
+    const colorOf = id => TINTS[s.classes.findIndex(c => c.id === id) % TINTS.length];
+    const gridDays = DAYS.slice(0, 5).concat(s.classes.some(c => c.days.includes('토')) ? ['토'] : []);
+    const cols = gridDays.map(d => {
+      const list = s.classes.filter(c => c.days.includes(d)).sort((x, y) => this.mins(x.start) - this.mins(y.start));
+      const laneEnd = [], lane = {};
+      list.forEach(c => { let i = laneEnd.findIndex(e => e <= this.mins(c.start)); if (i < 0) i = laneEnd.length; laneEnd[i] = this.mins(c.end); lane[c.id] = i; });
+      const count = {};
+      list.forEach(c => { count[c.id] = 1 + Math.max(0, ...list.filter(o => this.mins(o.start) < this.mins(c.end) && this.mins(c.start) < this.mins(o.end)).map(o => lane[o.id])); });
+      return { blocks: list.map(c => {
+      const a = Math.max(this.mins(c.start), HOUR0 * 60), b = Math.min(this.mins(c.end), (HOUR0 + HOURS) * 60), [bg, ink] = colorOf(c.id);
+      const n = count[c.id], l = lane[c.id];
+      return { name: c.name, time: `${c.start}–${c.end}`, top: `${(a - HOUR0 * 60) / 60 * PX}px`, height: `${Math.max(22, (b - a) / 60 * PX - 2)}px`,
+        left: `calc(${l / n * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)`,
+        bg, ink, border: s.cf.id === c.id ? `2px solid ${ink}` : 'none',
+        onClick: () => this.setState({ cf: { ...c, days: [...c.days] }, cfNote: '' }) };
+    }) }; });
+    const cc = this.classCheck();
+    const presets = [['09:00', '10:15'], ['10:30', '11:45'], ['12:00', '13:15'], ['13:30', '14:45'], ['15:00', '16:15'], ['16:30', '17:45']];
+
+    const today = new Date(); const addD = n => { const d = new Date(today); d.setDate(d.getDate() + n); return d; };
+    const nextMon = addD(((8 - today.getDay()) % 7) || 7);
+    const dateOpts = [['오늘', today], ['내일', addD(1)], ['다음 주 월', nextMon], ['2주 뒤', addD(14)]].map(([l, d]) => [l, this.iso(d)]);
+    const ec = this.eventCheck();
+    const sortedEvents = [...s.events].sort((x, y) => (x.date + (x.start || '00')).localeCompare(y.date + (y.start || '00')));
+
+    const OS = {
+      android: ['설정 앱을 열고 위치 → 위치 서비스 → 타임라인으로 들어가요.', '타임라인 데이터 내보내기를 눌러요.', '저장 위치를 고르면 Timeline.json 파일이 만들어져요.', '아래 버튼으로 그 파일을 올려주세요.'],
+      ios: ['구글 지도 앱을 열고 오른쪽 위 프로필 → 설정으로 들어가요.', '개인 콘텐츠 → 타임라인 데이터 내보내기를 눌러요.', '파일 앱에 저장을 골라요.', '아래 버튼으로 그 파일을 올려주세요.']
+    };
+    const canNext = { country: s.country === 'KR', home: !!homeDone, type: !!s.type, schedule: true, history: s.consent || s.skipped.history, done: true }[key];
+    const weekMin = s.classes.reduce((t, c) => t + (this.mins(c.end) - this.mins(c.start)) * c.days.length, 0);
+    const summary = [
+      { k: '국가', v: '대한민국' }, { k: '거주지', v: homeLabel }, { k: '유형', v: s.type || '-' },
+      { k: '수업 시간표', v: isStudent ? `${s.classes.length}과목 · 주 ${Math.round(weekMin / 6) / 10}시간` : '해당 없음' },
+      { k: '일정', v: `${s.events.length}개` }, { k: '방문 기록', v: s.uploaded ? '공항 방문 7회 · 방문지 142곳' : '나중에 가져오기' }
+    ].map((f, i) => ({ ...f, divider: i ? '1px solid #f1eae1' : 'none' }));
+
+    return {
+      stepNo: s.step + 1, stepTotal: this.steps.length, progress: `${((s.step + 1) / this.steps.length) * 100}%`,
+      title: TITLES[key][0], sub: TITLES[key][1],
+      isCountry: key === 'country', isHome: key === 'home', isType: key === 'type', isSchedule: key === 'schedule', isHistory: key === 'history', isDone: key === 'done',
+      countries: [['KR', '대한민국', '이용 가능'], ['JP', '일본', '승인 대기'], ['US', '미국', '승인 대기'], ['VN', '베트남', '승인 대기']].map(([code, name, note]) => {
+        const locked = code !== 'KR', on = s.country === code;
+        return { code, name, note, locked, onClick: () => !locked && set({ country: code }),
+          border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: locked ? '#f1ebe2' : on ? '#e8eefa' : '#fffdfa',
+          color: locked ? '#a39889' : '#2b2622', noteColor: locked ? '#a39889' : '#2f62c4', cursor: locked ? 'not-allowed' : 'pointer' };
+      }),
+      q: s.q, onQ: e => set({ q: e.target.value }), hasQ: !!q, qResults, noQ: !!q && !qResults.length,
+      sidos: REGIONS.map(r => ({ label: r.short, ...this.pill(s.sido === r.short), onClick: () => set({ sido: r.short, sgg: '', gu: '' }) })),
+      hasSggs: !!(region && region.sggs.length), sidoFull: region ? region.full : '', sggCount: region ? region.sggs.length : 0,
+      sggs: region ? region.sggs.map(g => ({ label: g.name, ...this.pill(s.sgg === g.name), onClick: () => set({ sgg: g.name, gu: '' }) })) : [],
+      hasGus: !!(sggObj && sggObj.gus.length), sgg: s.sgg,
+      gus: sggObj ? sggObj.gus.map(u => ({ label: u, ...this.pill(s.gu === u), onClick: () => set({ gu: u }) })) : [],
+      homeLabel, homeColor: homeDone ? '#2b2622' : '#9a9087',
+      addr: s.addr, onAddr: e => set({ addr: e.target.value }),
+      types: [['대학생', '수업 시간표 + 개인 일정'], ['직장인', '회사 일정 · 출장'], ['지방 거주자', '연휴마다 고향 방문'], ['출장 잦음', '짧은 일정 여러 번']].map(([label, desc]) => {
+        const on = s.type === label; return { label, desc, onClick: () => set({ type: label }), border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa' };
+      }),
+
+      importNote: s.imported ? '구글 캘린더에서 일정 2개를 불러왔어요. (화면용 샘플)' : '구글·애플 캘린더 연결 또는 .ics 파일로 가져와요. 불러온 일정은 아래 목록에 표시돼요.',
+      importLabel: s.imported ? '불러옴' : '캘린더 연결', importBg: s.imported ? '#f1ebe2' : '#fffdfa', imported: s.imported,
+      onImport: () => this.setState(st => ({ imported: true, tab: 'events', events: [...st.events,
+        { id: st.nid, kind: '시험', date: '2026-10-20', start: '10:00', end: '11:30', allDay: false, desc: '운영체제 중간고사', src: '구글 캘린더' },
+        { id: st.nid + 1, kind: '약속', date: '2026-10-03', start: '', end: '', allDay: true, desc: '개천절 · 가족 모임', src: '구글 캘린더' }], nid: st.nid + 2 })),
+      showTabs: isStudent,
+      schedTabs: [['classes', `수업 시간표 ${s.classes.length}`], ['events', `다가오는 일정 ${s.events.length}`]].map(([id, label]) => ({ label, onClick: () => set({ tab: id }), bg: tab === id ? '#fffdfa' : 'transparent', shadow: tab === id ? '0 1px 3px rgba(60,40,20,.12)' : 'none' })),
+      showClasses: tab === 'classes', showEvents: tab === 'events',
+      days: gridDays, cols,
+      hourLabels: Array.from({ length: HOURS + 1 }, (_, i) => ({ label: `${HOUR0 + i}`, top: `${i * PX}px` })),
+      cfTitle: s.cf.id ? `${s.cf.name || '수업'} 수정` : '수업 추가', cfEditing: !!s.cf.id,
+      cfCancel: () => this.setState({ cf: { id: null, name: '', place: '', days: [], start: '', end: '' }, cfNote: '' }),
+      cfName: s.cf.name, cfPlace: s.cf.place, cfStart: s.cf.start, cfEnd: s.cf.end,
+      onCfName: e => this.setCf({ name: e.target.value }), onCfPlace: e => this.setCf({ place: e.target.value }),
+      onCfStart: e => this.setCf({ start: e.target.value }), onCfEnd: e => this.setCf({ end: e.target.value }),
+      cfDays: DAYS.map(d => { const on = s.cf.days.includes(d); return { label: d, border: on ? 'none' : '1px solid #e2d8cc', bg: on ? '#2f62c4' : '#fffdfa', color: on ? '#fff' : '#2b2622',
+        onClick: () => this.setCf({ days: on ? s.cf.days.filter(x => x !== d) : [...s.cf.days, d] }) }; }),
+      presets: presets.map(([a, b]) => ({ label: `${a}–${b}`, ...this.pill(s.cf.start === a && s.cf.end === b), onClick: () => this.setCf({ start: a, end: b }) })),
+      cfMsg: s.cfNote || cc.msg, cfMsgColor: s.cfNote ? '#2d6a3a' : cc.color,
+      cfDisabled: !cc.ok, cfBtnBg: cc.ok ? '#2f62c4' : '#c9bfb3', cfBtnLabel: s.cf.id ? '변경 저장' : '시간표에 추가',
+      cfSave: () => { if (!cc.ok) return; this.setState(st => {
+        const c = { ...st.cf, name: st.cf.name.trim(), days: DAYS.filter(d => st.cf.days.includes(d)) };
+        const classes = c.id ? st.classes.map(x => x.id === c.id ? c : x) : [...st.classes, { ...c, id: st.nid }];
+        return { classes, nid: st.nid + 1, cf: { id: null, name: '', place: '', days: [], start: '', end: '' }, cfNote: `${c.name} 수업을 저장했어요.` };
+      }); },
+      cfDelete: () => this.setState(st => ({ classes: st.classes.filter(x => x.id !== st.cf.id), cfNote: `${st.cf.name} 수업을 지웠어요.`, cf: { id: null, name: '', place: '', days: [], start: '', end: '' } })),
+
+      efKinds: ['수업', '시험', '회의', '약속', '기타'].map(k => ({ label: k, ...this.pill(s.ef.kind === k), onClick: () => this.setEf({ kind: k }) })),
+      dateChips: dateOpts.map(([l, d]) => ({ label: `${l} ${this.fmtDate(d)}`, ...this.pill(s.ef.date === d), onClick: () => this.setEf({ date: d }) })),
+      efDate: s.ef.date, onEfDate: e => this.setEf({ date: e.target.value }),
+      toggleAllDay: () => this.setEf({ allDay: !s.ef.allDay }), adTrack: s.ef.allDay ? '#2f62c4' : '#d8cec2', adKnob: s.ef.allDay ? '16px' : '2px',
+      showTimes: !s.ef.allDay, efStart: s.ef.start, efEnd: s.ef.end,
+      onEfStart: e => this.setEf({ start: e.target.value }), onEfEnd: e => this.setEf({ end: e.target.value }),
+      efDesc: s.ef.desc, onEfDesc: e => this.setEf({ desc: e.target.value }),
+      efDescPh: { 수업: '예: 보강 수업', 시험: '예: 운영체제 중간고사', 회의: '예: 캡스톤 팀 회의', 약속: '예: 고향 친구 결혼식', 기타: '예: 병원 예약' }[s.ef.kind],
+      efMsg: ec.msg, efDisabled: !ec.ok, efBtnBg: ec.ok ? '#2f62c4' : '#c9bfb3',
+      efSave: () => { if (!ec.ok) return; this.setState(st => ({ events: [...st.events, { ...st.ef, desc: st.ef.desc.trim(), id: st.nid, src: '직접 입력' }], nid: st.nid + 1,
+        ef: { kind: st.ef.kind, date: '', start: '', end: '', allDay: false, desc: '' } })); },
+      eventCount: s.events.length, noEvents: !s.events.length,
+      events: sortedEvents.map((e, i) => ({ ...e, dateLabel: this.fmtDate(e.date), timeLabel: e.allDay ? '하루 종일' : `${e.start}–${e.end}`,
+        divider: i ? '1px solid #f1eae1' : 'none', onRemove: () => this.setState(st => ({ events: st.events.filter(x => x.id !== e.id) })) })),
+
+      osTabs: [['android', '안드로이드'], ['ios', '아이폰']].map(([id, label]) => ({ label, onClick: () => set({ os: id }), bg: s.os === id ? '#fffdfa' : 'transparent', shadow: s.os === id ? '0 1px 3px rgba(60,40,20,.12)' : 'none' })),
+      osSteps: OS[s.os].map((text, i) => ({ n: i + 1, text, divider: i ? '1px solid #f1eae1' : 'none' })),
+      notUploaded: !s.uploaded, uploaded: s.uploaded, onUpload: () => set({ uploaded: true }),
+      parsed: [{ v: '142', k: '방문지' }, { v: '7', k: '공항 방문' }, { v: '3', k: '자주 간 도시' }],
+      toggleConsent: () => set({ consent: !s.consent }), consentMark: s.consent ? '✓' : '',
+      consentBorder: s.consent ? 'none' : '1.5px solid #cdbfae', consentBg: s.consent ? '#2f62c4' : '#fffdfa',
+      summary,
+      showNav: key !== 'done', backVis: s.step ? 'visible' : 'hidden',
+      canSkip: key === 'history' && !s.uploaded,
+      onSkip: () => this.setState(st => ({ skipped: { ...st.skipped, history: true }, step: st.step + 1 })),
+      onBack: () => this.setState(st => ({ step: Math.max(0, st.step - 1) })),
+      onNext: () => canNext && this.setState(st => ({ step: st.step + 1 })),
+      nextDisabled: !canNext, nextBg: canNext ? '#2f62c4' : '#c9bfb3', nextCursor: canNext ? 'pointer' : 'not-allowed',
+      nextLabel: key === 'history' ? '저장하고 계속' : '다음'
+    };
+  }
+}
+</script>
+</body>
+</html>

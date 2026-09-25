@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Claude Design 프로토타입 원본과 생성된 런타임
+    "design/**",
+    // 참고 자료 (API 가이드, 다른 프로젝트)
+    "reference/**",
   ]),
 ]);
 

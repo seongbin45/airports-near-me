@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+</style>
+</helmet>
+<div style="height:100dvh;display:flex;flex-direction:column;background:#f6f1ea">
+  <header style="flex:none;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 12px) 20px 12px;border-bottom:1px solid #e8dfd4;background:#fbf8f4">
+    <div style="width:36px;height:36px;border-radius:12px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px">공</div>
+    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
+      <div style="font-weight:700;font-size:16px">공항 찾기</div>
+      <div style="font-size:12px;color:#7a7067">{{ headerSub }}</div>
+    </div>
+    <sc-if value="{{ showSheetBtn }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ toggleSheet }}" style="min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex:none">수집 정보 {{ filledCount }}/{{ totalCount }}</button>
+    </sc-if>
+    <a href="내 데이터.dc.html" aria-label="내 데이터" style="flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;text-decoration:none">
+      <div style="width:32px;height:32px;border-radius:50%;background:#efe6da;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#5d4a38">민지</div>
+    </a>
+  </header>
+
+  <div style="flex:1;min-height:0;display:flex">
+    <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div data-chat-scroll="1" style="flex:1;overflow-y:auto;padding:20px 16px 8px">
+        <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+          <div style="align-self:center;font-size:12px;color:#8a8077;background:#efe7dc;padding:6px 12px;border-radius:12px;text-align:center;text-wrap:pretty">국가 대한민국 · 거주지 경기 수원시 영통구 — 계정 설정에서 불러옴</div>
+
+          <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <sc-if value="{{ m.user }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:flex-end;max-width:78%;background:#2f62c4;color:#fff;padding:11px 15px;border-radius:18px 18px 4px 18px;font-size:15px;line-height:1.5;text-wrap:pretty">{{ m.text }}</div>
+              </sc-if>
+
+              <sc-if value="{{ m.bot }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:8px;align-items:flex-start">
+                  <div style="flex:none;width:30px;height:30px;border-radius:10px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">공</div>
+                  <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+                    <sc-if value="{{ m.text }}" hint-placeholder-val="{{ true }}">
+                      <div style="max-width:88%;background:#fffdfa;border:1px solid #ece3d8;padding:11px 15px;border-radius:4px 18px 18px 18px;font-size:15px;line-height:1.55;text-wrap:pretty;white-space:pre-line">{{ m.text }}</div>
+                    </sc-if>
+
+                    <sc-if value="{{ m.schedule }}" hint-placeholder-val="{{ false }}">
+                      <div style="width:100%;max-width:440px;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:6px 0">
+                        <div style="padding:8px 16px;font-size:12px;font-weight:600;color:#7a7067">{{ m.scheduleTitle }}</div>
+                        <sc-for list="{{ m.schedule }}" as="s" hint-placeholder-count="2">
+                          <div style="display:flex;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #f1eae1">
+                            <div style="font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;width:104px;flex:none">{{ s.time }}</div>
+                            <div style="flex:1;min-width:0;font-size:14px">{{ s.title }}</div>
+                            <div style="font-size:11px;color:#7a7067;background:#f3ece3;padding:3px 8px;border-radius:8px;flex:none">{{ s.src }}</div>
+                          </div>
+                        </sc-for>
+                        <div style="display:flex;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #f1eae1;color:#2f62c4">
+                          <div style="font-variant-numeric:tabular-nums;font-size:14px;font-weight:700;width:104px;flex:none">14:30 이후</div>
+                          <div style="font-size:14px;font-weight:600">출발 가능</div>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ m.history }}" hint-placeholder-val="{{ false }}">
+                      <div style="width:100%;max-width:440px;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:6px 0">
+                        <div style="padding:8px 16px;font-size:12px;font-weight:600;color:#7a7067">{{ m.historyTitle }}</div>
+                        <sc-for list="{{ m.history }}" as="h" hint-placeholder-count="3">
+                          <div style="display:flex;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #f1eae1">
+                            <div style="font-variant-numeric:tabular-nums;font-size:13px;color:#7a7067;width:72px;flex:none">{{ h.date }}</div>
+                            <div style="flex:1;min-width:0;font-size:14px;font-weight:600">{{ h.reason }}</div>
+                            <div style="font-size:12px;color:#7a7067;flex:none">{{ h.from }} 출발</div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ m.rows }}" hint-placeholder-val="{{ false }}">
+                      <div style="width:100%;display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                          <div style="font-size:12px;font-weight:600;color:#7a7067">{{ m.rowsTitle }}</div>
+                          <div style="font-size:11px;color:#9a5a1e;background:#fbeedd;padding:3px 8px;border-radius:8px">화면용 샘플 데이터</div>
+                        </div>
+                        <sc-for list="{{ m.rows }}" as="r" hint-placeholder-count="3">
+                          <div style="background:#fffdfa;border:{{ r.border }};border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+                            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                              <div style="font-size:12px;font-weight:700;color:{{ r.rankColor }}">{{ r.rank }}</div>
+                              <div style="font-size:17px;font-weight:700">{{ r.name }}</div>
+                              <div style="font-size:13px;color:#7a7067;letter-spacing:.04em">{{ r.code }}</div>
+                              <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end">
+                                <div style="font-size:20px;font-weight:700;font-variant-numeric:tabular-nums">{{ r.total }}</div>
+                                <div style="font-size:11px;color:#7a7067">14:30 집 출발 기준 총 소요</div>
+                              </div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
+                              <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+                                <div style="font-size:11px;color:#7a7067">집 → 공항 · {{ r.mode }}</div>
+                                <div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.access }}</div>
+                                <div style="font-size:11px;color:#9a9087">{{ r.accessSrc }}</div>
+                              </div>
+                              <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+                                <div style="font-size:11px;color:#7a7067">탑승 편 · {{ r.flightNo }}</div>
+                                <div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.dep }} → {{ r.arr }}</div>
+                                <div style="font-size:11px;color:#9a9087">운항 스케줄 DB</div>
+                              </div>
+                              <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+                                <div style="font-size:11px;color:#7a7067">공항 도착 여유</div>
+                                <div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.slack }}</div>
+                                <div style="font-size:11px;color:#9a9087">국내선 40분 전 기준</div>
+                              </div>
+                            </div>
+                          </div>
+                        </sc-for>
+                        <sc-if value="{{ m.noRoute }}" hint-placeholder-val="{{ false }}">
+                          <div style="font-size:12px;color:#7a7067;padding:0 4px">{{ m.noRoute }}</div>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ m.pending }}" hint-placeholder-val="{{ false }}">
+                      <div style="width:100%;max-width:440px;background:#fffdfa;border:1px dashed #cdbfae;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+                        <div style="font-size:14px;line-height:1.5;text-wrap:pretty">이 질문은 DB에서 바로 답할 수 없어 AI 호출이 필요해요. AI는 버튼을 눌러야만 호출돼요.</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                          <button onClick="{{ m.onSend }}" style="min-height:44px;padding:0 16px;border-radius:22px;border:none;background:#2f62c4;color:#fff;font:inherit;font-size:14px;font-weight:600;cursor:pointer">AI에게 보내기</button>
+                          <button onClick="{{ m.onCancel }}" style="min-height:44px;padding:0 16px;border-radius:22px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:14px;cursor:pointer">보내지 않기</button>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ m.showSrc }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ m.srcColor }};padding-left:4px;white-space:nowrap;max-width:100%">
+                        <div style="width:6px;height:6px;border-radius:50%;background:{{ m.srcColor }}"></div>
+                        <div>{{ m.src }}</div>
+                        <sc-if value="{{ m.verify }}" hint-placeholder-val="{{ false }}">
+                          <div style="color:#2e7d4f;background:#e6f2ea;padding:2px 8px;border-radius:8px">{{ m.verify }}</div>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="width:30px;height:30px;border-radius:10px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">공</div>
+              <div style="background:#fffdfa;border:1px solid #ece3d8;padding:12px 16px;border-radius:4px 18px 18px 18px;font-size:14px;color:#7a7067">DB에서 불러오는 중…</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="flex:none;border-top:1px solid #e8dfd4;background:#fbf8f4;padding:10px 16px calc(env(safe-area-inset-bottom) + 12px)">
+        <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">
+            <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3">
+              <button onClick="{{ c.onClick }}" style="flex:none;min-height:44px;padding:0 16px;border-radius:22px;border:{{ c.border }};background:{{ c.bg }};color:{{ c.color }};font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">{{ c.label }}</button>
+            </sc-for>
+          </div>
+          <form onSubmit="{{ onSubmit }}" style="display:flex;gap:8px;align-items:center">
+            <input value="{{ input }}" onChange="{{ onInput }}" placeholder="{{ placeholder }}" style="flex:1;min-width:0;min-height:48px;padding:0 18px;border-radius:24px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+            <button type="submit" style="flex:none;min-height:48px;padding:0 20px;border-radius:24px;border:none;background:#2f62c4;color:#fff;font:inherit;font-size:15px;font-weight:600;cursor:pointer">보내기</button>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <sc-if value="{{ showPanel }}" hint-placeholder-val="{{ true }}">
+      <aside style="position:{{ panelPos }};left:0;right:0;bottom:0;z-index:10;width:{{ panelWidth }};max-height:100%;flex:none;border-left:1px solid #e8dfd4;background:#fbf8f4;border-radius:{{ panelRadius }};box-shadow:{{ panelShadow }};padding:20px 20px calc(env(safe-area-inset-bottom) + 20px);display:flex;flex-direction:column;gap:14px;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="font-weight:700;font-size:15px">수집된 정보</div>
+          <sc-if value="{{ showSheetBtn }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleSheet }}" style="min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:13px;cursor:pointer">닫기</button>
+          </sc-if>
+        </div>
+        <div style="font-size:12px;color:#7a7067;line-height:1.5;text-wrap:pretty">모든 값은 입력하신 내용이나 계정 DB에서 가져옵니다. 추정한 값은 넣지 않습니다.</div>
+        <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px">
+          <sc-for list="{{ fields }}" as="f" hint-placeholder-count="6">
+            <div style="display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-top:{{ f.divider }}">
+              <div style="display:flex;justify-content:space-between;gap:8px">
+                <div style="font-size:12px;color:#7a7067">{{ f.label }}</div>
+                <div style="font-size:11px;color:{{ f.srcColor }}">{{ f.src }}</div>
+              </div>
+              <div style="font-size:14px;font-weight:600;color:{{ f.color }}">{{ f.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;background:#f1eadf;border-radius:16px;padding:14px">
+          <div style="font-size:12px;font-weight:700;color:#5d544c">AI 사용</div>
+          <div style="font-size:13px;line-height:1.5;color:#5d544c;text-wrap:pretty">자동 호출 없음. 버튼을 눌렀을 때만 호출되고, 답에 나온 편명·시각은 DB 값과 대조한 뒤에만 보여줍니다.</div>
+          <div style="font-size:13px;font-weight:600;color:#2b2622">이번 대화 AI 호출 {{ aiCalls }}회</div>
+        </div>
+      </aside>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;persona&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;대학생&quot;,&quot;직장인&quot;],&quot;default&quot;:&quot;대학생&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;transport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;차량&quot;,&quot;대중교통&quot;],&quot;default&quot;:&quot;차량&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showSources&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;sidePanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { step: 0, msgs: [], a: {}, typing: false, input: '', wide: true, sheet: false, aiCalls: 0, dots: 0 };
+  uid = 0;
+
+  componentDidMount() {
+    this.onResize = () => this.setState({ wide: window.innerWidth >= 980 });
+    this.onResize();
+    window.addEventListener('resize', this.onResize);
+    this.mo = new MutationObserver(() => requestAnimationFrame(() =>
+      document.querySelectorAll('[data-chat-scroll]').forEach(el => { el.scrollTop = el.scrollHeight; })));
+    this.mo.observe(document.body, { childList: true, subtree: true });
+    this.pushBot(0, {});
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onResize); clearTimeout(this.t); this.mo && this.mo.disconnect(); }
+
+  persona() { return this.props.persona ?? '대학생'; }
+  mode() { return this.props.transport ?? '차량'; }
+
+  data() {
+    return {
+      access: {
+        '차량': { GMP: 55, CJJ: 80, ICN: 95, src: '카카오모빌리티 경로' },
+        '대중교통': { GMP: 75, CJJ: 125, ICN: 110, src: 'ODsay 대중교통 경로' }
+      },
+      airports: { GMP: '김포', CJJ: '청주', ICN: '인천' },
+      flights: {
+        '제주': {
+          GMP: [['A 1203', '15:40', '16:50'], ['A 1207', '16:10', '17:20'], ['B 1213', '17:00', '18:10'], ['C 1219', '17:45', '18:55']],
+          CJJ: [['B 0871', '16:40', '17:45'], ['C 0875', '18:20', '19:25']],
+          ICN: [['A 1901', '17:30', '18:40'], ['B 1905', '19:10', '20:20']]
+        },
+        '부산': {
+          GMP: [['A 2101', '15:50', '16:55'], ['B 2105', '16:30', '17:35'], ['C 2111', '17:40', '18:45']],
+          ICN: [['A 2301', '17:20', '18:25']]
+        }
+      },
+      history: {
+        '제주': [
+          { date: '2025.10', reason: '추석 고향 방문', from: '김포' },
+          { date: '2025.02', reason: '현장 강의 수강', from: '청주' },
+          { date: '2024.09', reason: '추석 고향 방문', from: '김포' }
+        ],
+        '부산': [{ date: '2025.06', reason: '네트워킹 참여', from: '김포' }]
+      }
+    };
+  }
+
+  schedule() {
+    return this.persona() === '직장인'
+      ? [{ time: '09:00–12:00', title: '주간 회의·보고', src: '일정' }, { time: '13:30–14:30', title: '협력사 미팅', src: '일정' }]
+      : [{ time: '09:00–10:15', title: '운영체제', src: '수업 시간표' }, { time: '13:00–14:30', title: '캡스톤 팀 회의', src: '일정' }];
+  }
+
+  toMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+  fmtDur(n) { const h = Math.floor(n / 60), m = n % 60; return h ? `${h}시간${m ? ' ' + m + '분' : ''}` : `${m}분`; }
+
+  results(dest) {
+    const d = this.data(), acc = d.access[this.mode()], fl = d.flights[dest] || {};
+    const start = this.toMin('14:30'), rows = [], missing = [];
+    Object.keys(d.airports).forEach(code => {
+      const list = fl[code];
+      if (!list) { missing.push(d.airports[code]); return; }
+      const atAirport = start + acc[code];
+      const f = list.find(x => this.toMin(x[1]) - 40 >= atAirport);
+      if (!f) return;
+      rows.push({ code, name: d.airports[code] + '공항', access: this.fmtDur(acc[code]), accessSrc: acc.src,
+        flightNo: f[0], dep: f[1], arr: f[2], slack: this.fmtDur(this.toMin(f[1]) - atAirport),
+        totalMin: this.toMin(f[2]) - start, mode: this.mode() });
+    });
+    rows.sort((x, y) => x.totalMin - y.totalMin);
+    return {
+      rows: rows.map((r, i) => ({ ...r, total: this.fmtDur(r.totalMin), rank: i === 0 ? '가장 빠름' : `${i + 1}순위`,
+        rankColor: i === 0 ? '#2f62c4' : '#7a7067', border: i === 0 ? '2px solid #2f62c4' : '1px solid #ece3d8' })),
+      noRoute: missing.length ? `${missing.join('·')} → ${dest} 노선은 운항 스케줄 DB에 없어 제외했어요.` : ''
+    };
+  }
+
+  botMsg(step, a) {
+    const d = this.data(), id = ++this.uid;
+    if (step === 0) return { id, text: '민지님, 이번엔 어디로 가시나요?\n지난 방문 기록에 있는 곳을 골라도 되고, 직접 적어도 돼요.', src: '출처 · 방문 기록 DB' };
+    if (step === 1) return { id, text: `${a.dest} 일정은 언제인가요?`, src: '출처 · 사용자 입력' };
+    if (step === 2) return { id, text: `${a.date}에 등록된 일정을 확인했어요. 마지막 일정이 14:30에 끝나요.`, schedule: this.schedule(),
+      scheduleTitle: `${a.date} · ${this.persona() === '직장인' ? '회사 일정' : '수업 시간표 + 개인 일정'}`, src: '출처 · 일정 DB' };
+    if (step === 3) {
+      const h = d.history[a.dest] || [];
+      return { id, text: h.length ? `이번 ${a.dest} 방문 이유를 알려주세요. 지난 기록을 참고하세요.` : `이번 ${a.dest} 방문 이유를 알려주세요.`,
+        history: h.length ? h : null, historyTitle: `지난 ${a.dest} 방문 ${h.length}회`, src: '출처 · 방문 기록 DB (구글 타임라인 가져오기)' };
+    }
+    if (step === 4) {
+      const h = (d.history[a.dest] || []).filter(x => a.reason.includes('고향') ? x.reason.includes('고향') : x.reason.includes(a.reason.slice(0, 4)));
+      const same = h.length ? `지난 기록 중 같은 이유로 간 ${h.length}번은 모두 ${h[0].from}에서 출발하셨어요.` : '같은 이유로 간 기록은 없어요.';
+      const holiday = a.reason.includes('연휴') ? '10/3(토) 개천절부터 연휴라 일정과 맞아요. ' : '';
+      return { id, text: `${holiday}${same}\n14:30에 출발하면 공항별로 이렇게 걸려요.`, kind: 'results', src: '출처 · 일정 DB + 방문 기록 DB + 운항 스케줄 DB' };
+    }
+  }
+
+  pushBot(step, a, delay = 0) {
+    const go = () => this.setState(s => ({ typing: false, msgs: [...s.msgs, { role: 'bot', ...this.botMsg(step, a) }] }));
+    if (!delay) return go();
+    this.setState({ typing: true });
+    this.t = setTimeout(go, delay);
+  }
+
+  answer(text) {
+    const t = (text || '').trim();
+    if (!t || this.state.typing) return;
+    const { step } = this.state;
+    const user = { id: ++this.uid, role: 'user', text: t };
+    if (step === 0) {
+      const dest = ['제주', '부산'].find(x => t.includes(x));
+      if (!dest) {
+        this.setState(s => ({ input: '', msgs: [...s.msgs, user] }));
+        return this.later({ id: ++this.uid, role: 'bot', text: `'${t}' 노선은 아직 운항 스케줄 DB에 없어요. 현재 샘플에는 제주와 부산만 있어요.`, src: '출처 · 운항 스케줄 DB' });
+      }
+      return this.advance(user, { dest });
+    }
+    if (step === 1) return this.advance(user, { date: t });
+    if (step === 2) return this.advance(user, { depart: '14:30 이후' });
+    if (step === 3) return this.advance(user, { reason: t });
+    this.setState(s => ({ input: '', msgs: [...s.msgs, user] }));
+    this.later({ id: ++this.uid, role: 'bot', pending: t, src: 'AI 호출 대기 · 사용자 승인 필요' });
+  }
+
+  later(msg) {
+    this.setState({ typing: true });
+    this.t = setTimeout(() => this.setState(s => ({ typing: false, msgs: [...s.msgs, msg] })), 500);
+  }
+
+  advance(user, patch) {
+    const a = { ...this.state.a, ...patch }, step = this.state.step + 1;
+    this.setState(s => ({ input: '', a, step, msgs: [...s.msgs, user] }));
+    this.pushBot(step, a, 650);
+  }
+
+  callAI(kind, q, pendingId) {
+    const { a } = this.state, r = this.results(a.dest).rows;
+    if (!r.length) return;
+    const best = r[0], second = r[1];
+    const text = kind === 'summary'
+      ? `${a.date} 14:30에 출발하면 ${best.name}에서 ${best.dep} ${best.flightNo}편을 타는 게 가장 빨라요. ${a.dest}에 ${best.arr}에 도착하고, 총 ${best.total} 걸려요.${second ? ` 다음은 ${second.name} ${best.dep === second.dep ? '' : second.dep + ' '}${second.flightNo}편(총 ${second.total})이에요.` : ''}`
+      : `"${q}"에 대해: 추천 결과 기준으로 ${best.name} ${best.dep} ${best.flightNo}편이 가장 빨라요(총 ${best.total}). 이 외 정보는 DB에 없어 답할 수 없어요.`;
+    const n = (text.match(/\d{1,2}:\d{2}/g) || []).length, f = (text.match(/[A-C] \d{4}/g) || []).length;
+    this.setState(s => ({
+      msgs: [...s.msgs.filter(m => m.id !== pendingId), ...(kind === 'summary' ? [{ id: ++this.uid, role: 'user', text: 'AI 요약 받기' }] : [])],
+      typing: true, aiCalls: s.aiCalls + 1
+    }));
+    this.t = setTimeout(() => this.setState(s => ({ typing: false, msgs: [...s.msgs,
+      { id: ++this.uid, role: 'bot', text, ai: true, src: 'AI가 쓴 문장 · DB 결과만 사용', verify: `DB 대조 통과 · 편명 ${f}개, 시각 ${n}개 일치` }] })), 900);
+  }
+
+  reset() {
+    clearTimeout(this.t);
+    this.setState({ step: 0, msgs: [], a: {}, typing: false, input: '', aiCalls: 0 }, () => this.pushBot(0, {}));
+  }
+
+  chipList() {
+    const { step, a, typing } = this.state;
+    if (typing) return [];
+    const mk = (label, fn, primary) => ({ label, onClick: fn || (() => this.answer(label)),
+      border: primary ? 'none' : '1px solid #e2d8cc', bg: primary ? '#2f62c4' : '#fffdfa', color: primary ? '#fff' : '#2b2622' });
+    if (step === 0) return [mk('제주 · 지난 3회'), mk('부산 · 지난 1회')];
+    if (step === 1) return [mk('10/2(금) 오후'), mk('10/3(토) 오전'), mk('개천절 연휴 시작일')];
+    if (step === 2) return [mk('14:30 이후 출발할게요'), mk('일정 하나 빼고 더 일찍')];
+    if (step === 3) return ['연휴 고향 방문', '현장 강의 수강', '네트워킹 참여', '출장', '여행'].map(x => mk(x));
+    return [mk('AI 요약 받기', () => this.callAI('summary'), true), mk('처음부터 다시', () => this.reset())];
+  }
+
+  renderVals() {
+    const { msgs, a, step, wide, sheet, typing, input } = this.state;
+    const showSrc = this.props.showSources ?? true;
+    const res = a.dest && step >= 4 ? this.results(a.dest) : null;
+    const view = msgs.map(m => ({
+      ...m, bot: m.role === 'bot', user: m.role === 'user', text: m.pending ? '' : m.text,
+      showSrc: showSrc && m.role === 'bot', srcColor: m.ai ? '#8a4fb0' : '#8a8077',
+      rows: m.kind === 'results' && res ? res.rows : null, noRoute: m.kind === 'results' && res ? res.noRoute : '',
+      rowsTitle: `${a.dest}행 · 총 소요시간 순 · ${this.mode()}`,
+      onSend: () => this.callAI('free', m.pending, m.id),
+      onCancel: () => this.setState(s => ({ msgs: s.msgs.filter(x => x.id !== m.id) }))
+    }));
+    const F = (label, value, src) => ({ label, value: value || '아직 없음', src: value ? src : '', color: value ? '#2b2622' : '#b3a99f', srcColor: '#8a8077' });
+    const fields = [
+      F('국가', '대한민국', '계정 설정 · 타국가는 관리자 승인 후'),
+      F('거주지', '경기 수원시 영통구', '계정 설정'),
+      F('목적지', a.dest, '사용자 입력'),
+      F('날짜', a.date, '사용자 입력'),
+      F('출발 가능', a.depart, '일정 DB 대조'),
+      F('방문 이유', a.reason, '사용자 입력 · 기록 대조')
+    ].map((f, i) => ({ ...f, divider: i ? '1px solid #f1eae1' : 'none' }));
+    const filled = [a.dest, a.date, a.depart, a.reason].filter(Boolean).length + 2;
+    const sideOn = this.props.sidePanel ?? true;
+    const showPanel = sideOn && (wide || sheet);
+    return {
+      msgs: view, chips: this.chipList(), typing, 
+      input, onInput: e => this.setState({ input: e.target.value }),
+      onSubmit: e => { e.preventDefault(); this.answer(this.state.input); },
+      placeholder: step >= 4 ? '질문하면 AI 호출 전에 확인을 받아요' : '직접 입력하거나 아래에서 고르세요',
+      headerSub: `${this.persona()} · 대한민국 국내선`,
+      fields, filledCount: filled, totalCount: 6, aiCalls: this.state.aiCalls,
+      showPanel, showSheetBtn: sideOn && !wide, toggleSheet: () => this.setState(s => ({ sheet: !s.sheet })),
+      panelPos: wide ? 'static' : 'fixed', panelWidth: wide ? '340px' : 'auto',
+      panelRadius: wide ? '0' : '20px 20px 0 0', panelShadow: wide ? 'none' : '0 -8px 30px rgba(60,40,20,.15)'
+    };
+  }
+}
+</script>
+</body>
+</html>
