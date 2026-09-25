@@ -53,11 +53,11 @@ describe('parseOdsayPath', () => {
 });
 
 describe('buildAccessTimeSources', () => {
-  it('키가 있는 수단만 만든다 (키 없이 0분으로 채우지 않는다)', () => {
-    expect(buildAccessTimeSources({}).map(s => s.mode)).toEqual([]);
-    expect(buildAccessTimeSources({ KAKAO_REST_KEY: 'k' }).map(s => s.mode)).toEqual(['car']);
-    expect(buildAccessTimeSources({ ODSAY_KEY: 'o' }).map(s => s.mode)).toEqual(['transit']);
-    expect(buildAccessTimeSources({ KAKAO_REST_KEY: 'k', ODSAY_KEY: 'o' }).map(s => s.name))
+  it('키가 있는 수단만 만든다 (키 없이 0분으로 채우지 않는다) — OSRM을 끄면 키 없는 수단은 없다', () => {
+    expect(buildAccessTimeSources({ OSRM_URL: 'off' }).map(s => s.mode)).toEqual([]);
+    expect(buildAccessTimeSources({ KAKAO_REST_KEY: 'k', OSRM_URL: 'off' }).map(s => s.mode)).toEqual(['car']);
+    expect(buildAccessTimeSources({ ODSAY_KEY: 'o', OSRM_URL: 'off' }).map(s => s.mode)).toEqual(['transit']);
+    expect(buildAccessTimeSources({ KAKAO_REST_KEY: 'k', ODSAY_KEY: 'o', OSRM_URL: 'off' }).map(s => s.name))
       .toEqual(['카카오모빌리티 길찾기', 'ODsay 대중교통']);
   });
 });

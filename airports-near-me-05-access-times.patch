@@ -1,0 +1,740 @@
+From 57df9158621d6873cfc1db7898139728bf4c282c Mon Sep 17 00:00:00 2001
+From: genspark_dev <genspark_dev@genspark.ai>
+Date: Fri, 25 Sep 2026 15:19:21 +0900
+Subject: [PATCH] =?UTF-8?q?=EC=A7=91=20=E2=86=92=20=EA=B3=B5=ED=95=AD=20?=
+ =?UTF-8?q?=EC=9D=B4=EB=8F=99=20=EC=8B=9C=EA=B0=84=EC=9D=84=20=EA=B3=84?=
+ =?UTF-8?q?=EC=82=B0=ED=95=A0=20=EC=88=98=20=EC=9E=88=EA=B2=8C=20=ED=95=9C?=
+ =?UTF-8?q?=EB=8B=A4=20(=EC=A2=8C=ED=91=9C=20=E2=86=92=20=EC=9D=B4?=
+ =?UTF-8?q?=EB=8F=99=20=EC=8B=9C=EA=B0=84=20=EB=B0=B0=EC=B9=98)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+이 서비스의 핵심 계산인데 경로 자체가 막혀 있었다. access-time.ts는 "regions 대표
+좌표 기준"이라고 적혀 있었지만 regions에 좌표 컬럼이 없었고, accessTimeSources는
+빈 배열이었으며, 지오코딩 호출은 코드 어디에도 없었다. 그래서 실제 서비스 범위는
+시드의 수원시 영통구 × 3개 공항뿐이었다.
+
+- 마이그레이션 20260925152000: regions.lat/lng/geocoded_at.
+- lib/data/geocode.ts: 카카오 로컬 주소 검색. x=경도, y=위도이므로 한국 좌표
+  범위(위도 32~39.5, 경도 124~132.5)를 검사해 뒤바뀐 값을 버린다.
+- lib/data/access-time.ts: 차량(카카오모빌리티 길찾기, summary.duration 초→분),
+  대중교통(ODsay, info.totalTime 분). 키가 있는 수단만 만든다.
+  parseKakaoDirections/parseOdsayPath는 순수 함수로 떼어 테스트한다.
+  **추정값을 만들지 않는다** — 직선거리 환산은 추천 결과를 조용히 바꾼다.
+  파싱 실패 조합은 비워 두고 다음 실행에서 재시도한다.
+  ODsay 세부 필드는 실제 키로 확인이 필요하므로, totalTime을 못 찾으면 받은 키
+  이름을 오류 메시지에 넣는다.
+- planAccessTimes(): 좌표 없는 조합 제외, refresh-days(30) 안 실측 건너뜀,
+  샘플·빈 조합 우선, limit으로 호출 수 제한(두 API 모두 일일 한도).
+- scripts/geocode-regions.mts, scripts/build-access-times.mts + npm 스크립트.
+- 테스트 lib/__tests__/access-time.test.ts (문서 예시 응답 fixture 포함).
+
+(cherry picked from commit ae7b9e61862af426d9b6fe53371badc88283ae60)
+---
+ .env.example                                  |   4 +-
+ README.md                                     |  16 ++
+ lib/__tests__/access-time.test.ts             | 127 +++++++++++
+ lib/data/access-time.ts                       | 200 +++++++++++++++++-
+ lib/data/geocode.ts                           |  75 +++++++
+ package.json                                  |   4 +-
+ scripts/build-access-times.mts                | 104 +++++++++
+ scripts/geocode-regions.mts                   |  65 ++++++
+ .../20260925152000_region_coords.sql          |  20 ++
+ 9 files changed, 607 insertions(+), 8 deletions(-)
+ create mode 100644 lib/__tests__/access-time.test.ts
+ create mode 100644 lib/data/geocode.ts
+ create mode 100644 scripts/build-access-times.mts
+ create mode 100644 scripts/geocode-regions.mts
+ create mode 100644 supabase/migrations/20260925152000_region_coords.sql
+
+diff --git a/.env.example b/.env.example
+index ecd0159..f18d702 100644
+--- a/.env.example
++++ b/.env.example
+@@ -21,6 +21,8 @@ CRON_SECRET=
+ # service role 키. secret 키(sb_secret_…) 또는 service_role JWT(eyJ…)여야 한다.
+ # publishable 키(sb_publishable_…)를 넣으면 DB 쓰기가 RLS에 막혀 동기화가 전부 실패한다(42501).
+ SUPABASE_SERVICE_ROLE_KEY=
+-# 다음 단계 외부 데이터 (지금은 스텁)
++# 집 → 공항 이동 시간 (npm run geocode-regions / npm run access-times)
++# KAKAO_REST_KEY: 카카오디벨로퍼스 REST 키. 로컬 API(주소 검색)와 카카오모빌리티 길찾기에 함께 쓴다. (차량 소요시간)
++# ODSAY_KEY: ODsay 대중교통 길찾기 키 (대중교통 소요시간). 무료 서비스 유형은 일 호출 한도가 있다.
+ KAKAO_REST_KEY=
+ ODSAY_KEY=
+diff --git a/README.md b/README.md
+index b997f82..0f065a8 100644
+--- a/README.md
++++ b/README.md
+@@ -137,3 +137,19 @@ GitHub Actions: `.github/workflows/sync-flights.yml`. 저장소 Settings → Sec
+ | `fetch-errors` | 최근 24시간 `flight_fetch_log` 오류·0건 | 아니오 |
+ 
+ 판정 규칙은 `lib/server/data-health.ts`의 순수 함수이고 테스트가 있다. 조회는 `scripts/doctor.mts`가 service role로 한다.
++
++## 집 → 공항 이동 시간 채우기
++
++이 서비스의 핵심 계산인데 지금까지 경로 자체가 막혀 있었다 — `access-time.ts`는 "regions 대표 좌표 기준"이라고 적혀 있었지만 **`regions`에 좌표 컬럼이 없었고**, 어댑터는 빈 배열이었으며, 지오코딩 호출이 코드 어디에도 없었다.
++
++```bash
++npm run geocode-regions          # 1) 행정구역 대표 좌표 채우기 (카카오 로컬 주소 검색)
++npm run access-times             # 2) 지역 × 공항 조합의 이동 시간 계산·저장
++npm run doctor                   # 3) 얼마나 덮였는지 확인
++```
++
++- 1) `supabase/migrations/20260925152000_region_coords.sql`이 `regions.lat/lng/geocoded_at`을 만든다. `scripts/geocode-regions.mts`가 좌표 없는 **유효** 구역만 골라 "경기도 수원시 영통구"처럼 질의한다. 카카오는 `x=경도, y=위도`이므로 파서가 **한국 좌표 범위(위도 32~39.5, 경도 124~132.5)를 검사**해 뒤바뀐 값을 버린다.
++- 2) 수단별 출처: 차량 = 카카오모빌리티 자동차 길찾기(`KAKAO_REST_KEY`, `summary.duration` 초 → 분), 대중교통 = ODsay(`ODSAY_KEY`, `info.totalTime` 분). 키가 있는 수단만 계산한다.
++- **추정값을 만들지 않는다.** 직선거리로 환산한 시간은 그럴듯해 보이지만 추천 결과를 조용히 바꾼다. 파싱이 실패한 조합은 비워 두고 다음 실행에서 다시 시도하며, `npm run doctor`의 `access-times`·`regions-coords` 게이트가 덮인 비율을 보고한다.
++- `planAccessTimes()`(순수 함수·테스트 있음)가 대상을 정한다: 좌표 없는 조합 제외, 최근 `--refresh-days`(기본 30일) 안에 받은 실측은 건너뛰고, 화면용 샘플(`is_sample`)과 빈 조합을 먼저 채운다. `--limit`(기본 200)이 이번 실행의 API 호출 상한이다 — 두 API 모두 일일 한도가 있다.
++- ODsay 응답 본문의 세부 필드는 실제 키로 한 번 받아 확인해야 한다. 파서가 `info.totalTime`을 못 찾으면 **받은 키 이름을 오류 메시지에 넣어** 바로 고칠 수 있게 했다(테스트에 고정).
+diff --git a/lib/__tests__/access-time.test.ts b/lib/__tests__/access-time.test.ts
+new file mode 100644
+index 0000000..94ff3c7
+--- /dev/null
++++ b/lib/__tests__/access-time.test.ts
+@@ -0,0 +1,127 @@
++import { describe, expect, it } from 'vitest';
++import {
++  AccessTimeError, buildAccessTimeSources, parseKakaoDirections, parseOdsayPath, planAccessTimes,
++} from '../data/access-time';
++import { geocodeAddress, inKorea, parseAddressSearch, regionQuery } from '../data/geocode';
++
++// 카카오모빌리티 길찾기 응답은 개발자 문서의 예시 본문을 그대로 쓴다.
++// https://developers.kakaomobility.com/guide/navi-api/directions
++const KAKAO_OK = {
++  trans_id: '01948280a50d700d945a8ec5c132709d',
++  routes: [{
++    result_code: 0, result_msg: '길찾기 성공',
++    summary: { priority: 'RECOMMEND', fare: { taxi: 22200, toll: 0 }, distance: 19032, duration: 3494 },
++  }],
++};
++
++describe('parseKakaoDirections', () => {
++  it('duration(초)을 분으로 바꾼다 — 문서 예시 3494초 ≈ 58분', () => {
++    expect(parseKakaoDirections(KAKAO_OK)).toEqual({ minutes: 58, distanceMeters: 19032, taxiFare: 22200 });
++  });
++  it('result_code가 0이 아니면 실패 사유를 그대로 알려준다', () => {
++    const bad = { routes: [{ result_code: 104, result_msg: '출발지와 도착지가 너무 가깝습니다.' }] };
++    expect(() => parseKakaoDirections(bad)).toThrow(/104/);
++    try { parseKakaoDirections(bad); } catch (e) { expect((e as AccessTimeError).retryable).toBe(false); }
++  });
++  it('routes도 summary.duration도 없으면 형식 오류 (추정하지 않는다)', () => {
++    expect(() => parseKakaoDirections({})).toThrow('routes');
++    expect(() => parseKakaoDirections({ routes: [{ result_code: 0, summary: {} }] })).toThrow('duration');
++  });
++  it('1분 미만은 1분으로 둔다 (schema의 minutes > 0)', () => {
++    expect(parseKakaoDirections({ routes: [{ result_code: 0, summary: { duration: 12 } }] }).minutes).toBe(1);
++  });
++});
++
++describe('parseOdsayPath', () => {
++  const OK = { result: { path: [{ pathType: 1, info: { totalTime: 62, payment: 1550, busTransitCount: 1, subwayTransitCount: 2, totalWalk: 430 } }] } };
++  it('info.totalTime(분)을 쓴다', () => {
++    expect(parseOdsayPath(OK)).toEqual({ minutes: 62, payment: 1550, transfers: 3 });
++  });
++  it('오류 응답은 코드와 메시지를 남긴다', () => {
++    try { parseOdsayPath({ error: { code: -8, message: '필수 입력값 형식 및 범위 오류' } }); }
++    catch (e) { expect((e as Error).message).toContain('필수 입력값'); expect((e as AccessTimeError).code).toBe('-8'); }
++    expect(() => parseOdsayPath({ error: { code: 500, message: '서버 내부 오류' } })).toThrow();
++  });
++  it('totalTime을 못 찾으면 받은 키를 알려준다 (키를 받아보고 고칠 수 있게)', () => {
++    try { parseOdsayPath({ result: { path: [{ info: { totallyDifferent: 1 } }] } }); expect.unreachable(); }
++    catch (e) { expect((e as Error).message).toContain('totallyDifferent'); }
++    expect(() => parseOdsayPath({ result: { somethingElse: 1 } })).toThrow('path 없음');
++  });
++  it('경로가 없으면(result.path 없음) 형식 오류', () => {
++    expect(() => parseOdsayPath({ result: {} })).toThrow('path 없음');
++  });
++});
++
++describe('buildAccessTimeSources', () => {
++  it('키가 있는 수단만 만든다 (키 없이 0분으로 채우지 않는다)', () => {
++    expect(buildAccessTimeSources({}).map(s => s.mode)).toEqual([]);
++    expect(buildAccessTimeSources({ KAKAO_REST_KEY: 'k' }).map(s => s.mode)).toEqual(['car']);
++    expect(buildAccessTimeSources({ ODSAY_KEY: 'o' }).map(s => s.mode)).toEqual(['transit']);
++    expect(buildAccessTimeSources({ KAKAO_REST_KEY: 'k', ODSAY_KEY: 'o' }).map(s => s.name))
++      .toEqual(['카카오모빌리티 길찾기', 'ODsay 대중교통']);
++  });
++});
++
++describe('planAccessTimes — 이번 실행에서 무엇을 계산할지', () => {
++  const now = new Date('2026-09-25T06:00:00Z');
++  const base = {
++    regions: [{ id: 1, lat: 37.25, lng: 127.02 }, { id: 2, lat: null, lng: null }],
++    airports: [{ code: 'GMP', lat: 37.55, lng: 126.79 }, { code: 'CJU', lat: null, lng: null }],
++    modes: ['car', 'transit'] as const,
++    existing: [], refreshDays: 30, limit: 100, now,
++  };
++  it('좌표가 없는 지역·공항은 대상에서 빼고 사유를 센다', () => {
++    const out = planAccessTimes({ ...base, modes: [...base.modes] });
++    expect(out.candidateTotal).toBe(2);      // 지역 1 × 공항 1 × 수단 2
++    expect(out.noCoords).toBe(6);            // (2×2×2) − 2
++    expect(out.todo.map(t => `${t.airport}/${t.mode}`)).toEqual(['GMP/car', 'GMP/transit']);
++  });
++  it('최근에 받은 실측은 건너뛰고, 샘플·오래된 실측은 다시 계산한다', () => {
++    const out = planAccessTimes({
++      ...base, modes: [...base.modes],
++      existing: [
++        { region_id: 1, airport: 'GMP', mode: 'car', fetched_at: '2026-09-24T00:00:00Z', is_sample: false },
++        { region_id: 1, airport: 'GMP', mode: 'transit', fetched_at: '2026-06-01T00:00:00Z', is_sample: false },
++      ],
++    });
++    expect(out.fresh).toBe(1);
++    expect(out.todo.map(t => t.mode)).toEqual(['transit']);
++  });
++  it('샘플 행은 최근이어도 다시 계산한다 (실측으로 바꿔야 한다)', () => {
++    const out = planAccessTimes({
++      ...base, modes: [...base.modes],
++      existing: [{ region_id: 1, airport: 'GMP', mode: 'car', fetched_at: '2026-09-25T05:00:00Z', is_sample: true }],
++    });
++    expect(out.fresh).toBe(0);                        // 샘플은 최근이어도 '실측'으로 세지 않는다
++    expect(out.todo.map(t => t.mode)).toEqual(['car', 'transit']); // 샘플 car + 아직 없는 transit
++  });
++  it('limit으로 이번 실행 호출 수를 자른다', () => {
++    const out = planAccessTimes({ ...base, modes: [...base.modes], limit: 1 });
++    expect(out.todo).toHaveLength(1);
++    expect(out.candidateTotal).toBe(2);
++  });
++});
++
++describe('geocode — 카카오 로컬 주소 검색', () => {
++  it('x=경도, y=위도를 바꿔 읽지 않는다', () => {
++    const body = { documents: [{ address_name: '경기도 수원시 영통구', x: '127.046', y: '37.259' }] };
++    expect(parseAddressSearch(body)).toEqual({ lat: 37.259, lng: 127.046, matched: '경기도 수원시 영통구' });
++  });
++  it('한국 밖 좌표(뒤바뀐 값 포함)는 버린다', () => {
++    expect(inKorea(37.5, 127)).toBe(true);
++    expect(inKorea(127, 37.5)).toBe(false);
++    expect(parseAddressSearch({ documents: [{ x: '37.259', y: '127.046' }] })).toBeNull();
++  });
++  it('검색 결과가 없으면 null', () => {
++    expect(parseAddressSearch({ documents: [] })).toBeNull();
++    expect(parseAddressSearch({})).toBeNull();
++  });
++  it('구가 있으면 질의에 구까지 붙인다', () => {
++    expect(regionQuery({ sido: '경기도', sigungu: '수원시', gu: '영통구' })).toBe('경기도 수원시 영통구');
++    expect(regionQuery({ sido: '세종특별자치시', sigungu: null, gu: null })).toBe('세종특별자치시');
++  });
++  it('키가 거부되면 그 사실을 코드로 알려준다', async () => {
++    const fake = (async () => new Response('{}', { status: 401 })) as unknown as typeof fetch;
++    await expect(geocodeAddress('서울', { key: 'bad', fetchImpl: fake })).rejects.toThrow('KAKAO_REST_KEY');
++  });
++});
+diff --git a/lib/data/access-time.ts b/lib/data/access-time.ts
+index e6fce80..61b810b 100644
+--- a/lib/data/access-time.ts
++++ b/lib/data/access-time.ts
+@@ -1,14 +1,202 @@
+-// 집 → 공항 이동 시간 어댑터 (다음 단계에서 구현).
+-// 차량: 카카오모빌리티 길찾기 (KAKAO_REST_KEY). 대중교통: ODsay (ODSAY_KEY).
+-// 구글 지도는 국내 자동차 경로를 지원하지 않는다.
+-// profiles.lat/lng(상세 주소 지오코딩)가 있으면 좌표 기준, 없으면 regions 대표 좌표 기준으로 계산해 access_times에 캐시한다.
++// 집 → 공항 이동 시간 어댑터.
++//   차량: 카카오모빌리티 자동차 길찾기 (KAKAO_REST_KEY)
++//   대중교통: ODsay 대중교통 길찾기 (ODSAY_KEY)
++//
++// 좌표는 regions 대표 좌표(또는 profiles.lat/lng) → airports 좌표.
++//
++// 두 API 모두 좌표를 "경도,위도" 순서로 받는다 (Kakao는 x=경도, y=위도).
++// 응답 파싱은 순수 함수로 떼어 테스트한다. 파싱이 실패하면 **추정값을 만들지 않는다** —
++// 직선거리로 환산한 값은 그럴듯해 보이지만 추천 결과를 조용히 바꾸고, 사람이 알아채지 못한다.
++// 값을 못 구하면 그 조합은 그냥 비워 두고 `npm run doctor`의 접근시간 게이트가 덮인 비율을 보여준다.
+ 
+ import type { Mode } from '../recommend';
+ 
++export interface LatLng { lat: number; lng: number }
++
+ export interface AccessTimeSource {
+   mode: Mode;
++  /** access_times.source에 그대로 저장되는 이름 */
+   name: string;
+-  minutes(from: { lat: number; lng: number }, to: { lat: number; lng: number }, departAt: Date): Promise<number>;
++  /** 실패는 던진다. 배치는 조합 단위로 기록하고 계속 진행한다. */
++  minutes(from: LatLng, to: LatLng, departAt: Date): Promise<number>;
++}
++
++export class AccessTimeError extends Error {
++  constructor(message: string, readonly code: string, readonly retryable: boolean) {
++    super(message);
++  }
++}
++
++const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
++const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
++const numOrNull = (v: unknown): number | null => {
++  const n = typeof v === 'number' ? v : Number(v);
++  return Number.isFinite(n) ? n : null;
++};
++/** 분 단위로. 1분 미만은 1분으로 둔다 (0분은 schema의 minutes > 0에 걸린다) */
++const toMinutes = (seconds: number) => Math.max(1, Math.round(seconds / 60));
++
++// ───────────── 카카오모빌리티 자동차 길찾기 ─────────────
++
++export interface CarRoute { minutes: number; distanceMeters: number | null; taxiFare: number | null }
++
++/**
++ * 응답: { trans_id, routes: [{ result_code: 0, result_msg, summary: { distance(m), duration(초), fare:{taxi} } }] }
++ * result_code가 0이 아니면 실패 응답이다 (예: 출발·도착이 너무 가까움).
++ */
++export function parseKakaoDirections(body: unknown): CarRoute {
++  const routes = arr(obj(body)?.routes);
++  if (!routes.length) throw new AccessTimeError('길찾기 응답에 routes가 없어요.', 'FORMAT', false);
++  const route = obj(routes[0]);
++  const code = numOrNull(route?.result_code);
++  if (code != null && code !== 0) {
++    throw new AccessTimeError(`길찾기 실패(${code}): ${String(route?.result_msg ?? '')}`.trim(), String(code), false);
++  }
++  const summary = obj(route?.summary);
++  const duration = numOrNull(summary?.duration);
++  if (duration == null) throw new AccessTimeError('길찾기 응답에 summary.duration이 없어요.', 'FORMAT', false);
++  return {
++    minutes: toMinutes(duration),
++    distanceMeters: numOrNull(summary?.distance),
++    taxiFare: numOrNull(obj(summary?.fare)?.taxi),
++  };
++}
++
++export function kakaoCarSource(key: string, fetchImpl: typeof fetch = fetch): AccessTimeSource {
++  return {
++    mode: 'car',
++    name: '카카오모빌리티 길찾기',
++    async minutes(from, to) {
++      // origin/destination은 "경도,위도". priority=RECOMMEND(기본), summary=true로 요약만 받는다.
++      const qs = new URLSearchParams({
++        origin: `${from.lng},${from.lat}`, destination: `${to.lng},${to.lat}`,
++        priority: 'RECOMMEND', summary: 'true', alternatives: 'false',
++      });
++      const res = await fetchImpl(`https://apis-navi.kakaomobility.com/v1/directions?${qs}`, {
++        headers: { Authorization: `KakaoAK ${key}` }, signal: AbortSignal.timeout(15000),
++      });
++      if (res.status === 401 || res.status === 403) {
++        throw new AccessTimeError('카카오모빌리티 키가 거부됐어요. KAKAO_REST_KEY를 확인하세요.', 'KEY', false);
++      }
++      if (res.status === 429 || res.status >= 500) {
++        throw new AccessTimeError(`길찾기 API 오류 (HTTP ${res.status})`, String(res.status), true);
++      }
++      if (!res.ok) throw new AccessTimeError(`길찾기 API 오류 (HTTP ${res.status})`, String(res.status), false);
++      return parseKakaoDirections(await res.json()).minutes;
++    },
++  };
++}
++
++// ───────────── ODsay 대중교통 길찾기 ─────────────
++
++export interface TransitRoute { minutes: number; payment: number | null; transfers: number | null }
++
++/**
++ * 응답: { result: { path: [ { info: { totalTime(분), payment, busTransitCount, subwayTransitCount, … } } ] } }
++ * 오류는 { error: { code, message } } 로 온다 (예: -8 필수값 형식 오류, -9 필수값 누락, 500 서버 오류).
++ * 응답 본문의 세부 필드는 실제 키를 받아 확인해야 하므로, 못 찾으면 받은 키를 오류 메시지에 넣는다.
++ */
++export function parseOdsayPath(body: unknown): TransitRoute {
++  const err = obj(obj(body)?.error);
++  if (err) {
++    const code = String(err.code ?? 'ERROR');
++    throw new AccessTimeError(`ODsay 오류(${code}): ${String(err.message ?? '')}`.trim(), code, code === '500');
++  }
++  const root = obj(obj(body)?.result);
++  if (!root) throw new AccessTimeError('ODsay 응답에 result가 없어요.', 'FORMAT', false);
++  const first = obj(arr(root.path)[0]);
++  const info = obj(first?.info);
++  const total = numOrNull(info?.totalTime);
++  if (total == null || total <= 0) {
++    const seen = info ? Object.keys(info).slice(0, 12).join(', ') : `${Object.keys(root).slice(0, 12).join(', ')} (path 없음)`;
++    throw new AccessTimeError(`ODsay 응답에서 info.totalTime을 찾지 못했어요. 받은 키: ${seen}`, 'FORMAT', false);
++  }
++  const transfers = (numOrNull(info?.busTransitCount) ?? 0) + (numOrNull(info?.subwayTransitCount) ?? 0);
++  return { minutes: Math.max(1, Math.round(total)), payment: numOrNull(info?.payment), transfers };
+ }
+ 
+-export const accessTimeSources: AccessTimeSource[] = [];
++export function odsayTransitSource(key: string, fetchImpl: typeof fetch = fetch): AccessTimeSource {
++  return {
++    mode: 'transit',
++    name: 'ODsay 대중교통',
++    async minutes(from, to) {
++      // SX·SY = 출발 경도·위도, EX·EY = 도착 경도·위도. OPT=0 추천순, SearchPathType=0 지하철+버스.
++      const qs = new URLSearchParams({
++        SX: String(from.lng), SY: String(from.lat), EX: String(to.lng), EY: String(to.lat),
++        OPT: '0', SearchPathType: '0', apiKey: key,
++      });
++      const res = await fetchImpl(`https://api.odsay.com/v1/api/searchPubTransPathT?${qs}`, { signal: AbortSignal.timeout(15000) });
++      if (res.status === 429 || res.status >= 500) {
++        throw new AccessTimeError(`ODsay API 오류 (HTTP ${res.status})`, String(res.status), true);
++      }
++      if (!res.ok) throw new AccessTimeError(`ODsay API 오류 (HTTP ${res.status})`, String(res.status), false);
++      return parseOdsayPath(await res.json()).minutes;
++    },
++  };
++}
++
++/** 키가 있는 수단만. 키가 없으면 그 수단은 채우지 않는다 (0으로 채우면 추천이 조용히 틀어진다). */
++export function buildAccessTimeSources(env: { KAKAO_REST_KEY?: string; ODSAY_KEY?: string }): AccessTimeSource[] {
++  const out: AccessTimeSource[] = [];
++  if (env.KAKAO_REST_KEY) out.push(kakaoCarSource(env.KAKAO_REST_KEY));
++  if (env.ODSAY_KEY) out.push(odsayTransitSource(env.ODSAY_KEY));
++  return out;
++}
++
++// ───────────── 배치 대상 선정 (순수 함수) ─────────────
++
++export interface PlanRow { region_id: number; airport: string; mode: Mode }
++export interface ExistingRow { region_id: number; airport: string; mode: string; fetched_at: string; is_sample: boolean }
++
++export interface PlanInput {
++  regions: { id: number; lat: number | null; lng: number | null }[];
++  airports: { code: string; lat: number | null; lng: number | null }[];
++  modes: Mode[];
++  existing: ExistingRow[];
++  /** 실측 행을 이 일수 안에 받았으면 다시 묻지 않는다 */
++  refreshDays: number;
++  /** 이번 실행에서 호출할 최대 조합 수 (API 일일 한도 보호) */
++  limit: number;
++  now: Date;
++}
++
++export interface PlanOut {
++  todo: PlanRow[];
++  /** 좌표가 없어 계산할 수 없는 조합 수 */
++  noCoords: number;
++  /** 최근에 이미 받아 둔 실측 조합 수 */
++  fresh: number;
++  /** 대상 전체(좌표가 있는 조합) */
++  candidateTotal: number;
++}
++
++/**
++ * 무엇을 지금 계산할지 정한다.
++ *  - 좌표가 없는 지역·공항은 대상에서 뺀다 (사유를 세어 보고한다).
++ *  - 실측이고 refreshDays 안에 받은 행은 건너뛴다.
++ *  - 화면용 샘플(is_sample)과 아직 없는 조합을 먼저 채운다.
++ *  - limit으로 자른다 (남은 수는 candidateTotal로 알 수 있다).
++ */
++export function planAccessTimes(i: PlanInput): PlanOut {
++  const regions = i.regions.filter(r => r.lat != null && r.lng != null);
++  const airports = i.airports.filter(a => a.lat != null && a.lng != null);
++  const freshBefore = i.now.getTime() - i.refreshDays * 86400_000;
++
++  const existing = new Map(i.existing.map(e => [`${e.region_id}|${e.airport}|${e.mode}`, e]));
++  const todo: PlanRow[] = [];
++  let fresh = 0;
++  const candidateTotal = regions.length * airports.length * i.modes.length;
++  const noCoords = i.regions.length * i.airports.length * i.modes.length - candidateTotal;
++
++  for (const r of regions) {
++    for (const a of airports) {
++      for (const mode of i.modes) {
++        const row = existing.get(`${r.id}|${a.code}|${mode}`);
++        if (row && !row.is_sample && Date.parse(row.fetched_at) >= freshBefore) { fresh++; continue; }
++        todo.push({ region_id: r.id, airport: a.code, mode });
++      }
++    }
++  }
++  todo.sort((x, y) => x.region_id - y.region_id || x.airport.localeCompare(y.airport) || x.mode.localeCompare(y.mode));
++  return { todo: todo.slice(0, i.limit), noCoords, fresh, candidateTotal };
++}
+diff --git a/lib/data/geocode.ts b/lib/data/geocode.ts
+new file mode 100644
+index 0000000..f4d3b42
+--- /dev/null
++++ b/lib/data/geocode.ts
+@@ -0,0 +1,75 @@
++// 주소 → 좌표 지오코딩 (카카오 로컬 API).
++//
++// regions의 시·도 / 시·군 / 구 이름을 그대로 질의해 대표 좌표를 채운다.
++// 응답 파싱은 순수 함수(parseAddressSearch)로 떼어 테스트한다.
++//
++// 주의: 카카오는 x를 경도, y를 위도로 준다. 순서를 바꿔 쓰면 한국 밖 좌표가 나온다.
++// (한국은 위도 33~38, 경도 124~132 범위라 서로 바꾸면 즉시 범위 밖이 된다 — 파서가 검사한다)
++
++export class GeocodeError extends Error {
++  constructor(message: string, readonly code: string, readonly retryable: boolean) {
++    super(message);
++  }
++}
++
++export interface GeoPoint { lat: number; lng: number; matched: string }
++
++/** 한국 영역 밖이면 좌표로 쓰지 않는다 (x·y를 바꿔 읽은 사고를 조기에 잡는다) */
++export function inKorea(lat: number, lng: number): boolean {
++  return lat >= 32 && lat <= 39.5 && lng >= 124 && lng <= 132.5;
++}
++
++const num = (v: unknown): number | null => {
++  const n = typeof v === 'number' ? v : Number(v);
++  return Number.isFinite(n) ? n : null;
++};
++
++/**
++ * 카카오 로컬 주소 검색 응답 파싱.
++ * 응답: { documents: [{ address_name, x, y, address?: {...}, road_address?: {...} }] }
++ * 첫 후보가 시·군·구 단위가 아니면(예: "영통구" 질의가 다른 동으로 잡히면) 버린다.
++ */
++export function parseAddressSearch(body: unknown): GeoPoint | null {
++  const docs = (body as { documents?: unknown })?.documents;
++  if (!Array.isArray(docs) || !docs.length) return null;
++  for (const raw of docs) {
++    const d = raw as Record<string, unknown>;
++    const lng = num(d.x), lat = num(d.y);
++    if (lat == null || lng == null) continue;
++    if (!inKorea(lat, lng)) continue; // x·y를 뒤집었거나 해외 주소
++    const matched = String(d.address_name ?? (d.road_address as { address_name?: string } | undefined)?.address_name ?? '');
++    return { lat, lng, matched };
++  }
++  return null;
++}
++
++export interface GeocodeOpts {
++  key: string;
++  fetchImpl?: typeof fetch;
++}
++
++/** 주소 문자열 하나를 좌표로. 못 찾으면 null. */
++export async function geocodeAddress(query: string, o: GeocodeOpts): Promise<GeoPoint | null> {
++  const fetchImpl = o.fetchImpl ?? fetch;
++  const url = new URL('https://dapi.kakao.com/v2/local/search/address.json');
++  url.searchParams.set('query', query);
++  url.searchParams.set('size', '1');
++
++  const res = await fetchImpl(url.toString(), {
++    headers: { Authorization: `KakaoAK ${o.key}` },
++    signal: AbortSignal.timeout(10000),
++  });
++  if (res.status === 401 || res.status === 403) {
++    throw new GeocodeError('카카오 REST 키가 거부됐어요. KAKAO_REST_KEY를 확인하세요.', 'KEY', false);
++  }
++  if (res.status >= 500 || res.status === 429) {
++    throw new GeocodeError(`카카오 로컬 API 오류 (HTTP ${res.status})`, String(res.status), true);
++  }
++  if (!res.ok) throw new GeocodeError(`카카오 로컬 API 오류 (HTTP ${res.status})`, String(res.status), false);
++  return parseAddressSearch(await res.json());
++}
++
++/** regions 행의 질의 문자열. 구가 있으면 구까지 붙인다 ("경기도 수원시 영통구"). */
++export function regionQuery(r: { sido: string; sigungu: string | null; gu: string | null }): string {
++  return [r.sido, r.sigungu, r.gu].filter(Boolean).join(' ');
++}
+diff --git a/package.json b/package.json
+index 83d4221..1e7ff40 100644
+--- a/package.json
++++ b/package.json
+@@ -9,7 +9,9 @@
+     "lint": "eslint",
+     "test": "vitest run",
+     "sync": "tsx --env-file-if-exists=.env.local scripts/sync.mts",
+-    "doctor": "tsx --env-file-if-exists=.env.local scripts/doctor.mts"
++    "doctor": "tsx --env-file-if-exists=.env.local scripts/doctor.mts",
++    "geocode-regions": "tsx --env-file-if-exists=.env.local scripts/geocode-regions.mts",
++    "access-times": "tsx --env-file-if-exists=.env.local scripts/build-access-times.mts"
+   },
+   "dependencies": {
+     "@anthropic-ai/sdk": "^0.128.0",
+diff --git a/scripts/build-access-times.mts b/scripts/build-access-times.mts
+new file mode 100644
+index 0000000..0037f1b
+--- /dev/null
++++ b/scripts/build-access-times.mts
+@@ -0,0 +1,104 @@
++// 집 → 공항 이동 시간 채우기.
++//   npm run access-times -- [--mode car|transit] [--region 123] [--limit 200] [--refresh-days 30] [--delay 200] [--dry]
++//
++// 좌표가 있는 지역 × 좌표가 있는 공항 조합을 계산해 access_times에 넣는다.
++// 실측 행을 refreshDays 안에 받았으면 건너뛰고, 화면용 샘플과 빈 조합을 먼저 채운다.
++// --limit이 이번 실행의 API 호출 상한이다 (Kakao Mobility·ODsay 모두 일일 한도가 있다).
++// 값을 못 구한 조합은 비워 두고 다음 실행에서 다시 시도한다. 추정값으로 채우지 않는다.
++import { createClient } from '@supabase/supabase-js';
++import { buildAccessTimeSources, planAccessTimes, type ExistingRow } from '../lib/data/access-time';
++import type { Mode } from '../lib/recommend';
++
++const arg = (name: string) => process.argv.includes(`--${name}`);
++const opt = (name: string) => {
++  const i = process.argv.indexOf(`--${name}`);
++  return i >= 0 ? process.argv[i + 1] : undefined;
++};
++const optNum = (name: string, fallback: number) => {
++  const v = Number(opt(name));
++  return Number.isFinite(v) ? v : fallback;
++};
++
++const need = (k: string) => {
++  const v = process.env[k];
++  if (!v) { console.error(`환경변수 ${k}가 없어요.`); process.exit(2); }
++  return v;
++};
++
++const admin = createClient(need('NEXT_PUBLIC_SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
++const dry = arg('dry'), delay = optNum('delay', 200);
++const keyMode = opt('mode') as Mode | undefined;
++const regionFilter = opt('region') ? Number(opt('region')) : null;
++
++const sources = buildAccessTimeSources({ KAKAO_REST_KEY: process.env.KAKAO_REST_KEY, ODSAY_KEY: process.env.ODSAY_KEY })
++  .filter(s => !keyMode || s.mode === keyMode);
++if (!sources.length) {
++  console.error('계산할 수단이 없어요. KAKAO_REST_KEY(차량) 또는 ODSAY_KEY(대중교통)를 설정하세요.');
++  process.exit(2);
++}
++
++const [regions, airports, access] = await Promise.all([
++  admin.from('regions').select('id, full_name, lat, lng').not('lat', 'is', null).not('lng', 'is', null).limit(1000),
++  admin.from('airports').select('code, name_ko, lat, lng').not('lat', 'is', null).not('lng', 'is', null).limit(100),
++  admin.from('access_times').select('region_id, airport, mode, fetched_at, is_sample').limit(100000),
++]);
++for (const r of [regions, airports, access]) {
++  if (r.error) { console.error(`조회 실패: ${r.error.message}`); process.exit(2); }
++}
++
++const regionRows = (regions.data ?? []).filter(r => !regionFilter || r.id === regionFilter);
++if (!regionRows.length) { console.error(regionFilter ? `지역 ${regionFilter}을(를) 찾지 못했어요(좌표가 있는 지역만).` : '좌표가 있는 지역이 없어요. 먼저 npm run geocode-regions 를 돌리세요.'); process.exit(1); }
++
++const plan = planAccessTimes({
++  regions: regionRows.map(r => ({ id: r.id as number, lat: r.lat as number, lng: r.lng as number })),
++  airports: (airports.data ?? []).map(a => ({ code: a.code as string, lat: a.lat as number, lng: a.lng as number })),
++  modes: sources.map(s => s.mode),
++  existing: (access.data ?? []) as ExistingRow[],
++  refreshDays: optNum('refresh-days', 30),
++  limit: optNum('limit', 200),
++  now: new Date(),
++});
++
++const label = new Map((regions.data ?? []).map(r => [r.id as number, r.full_name as string]));
++const byCode = new Map((airports.data ?? []).map(a => [a.code as string, { name: a.name_ko as string, lat: a.lat as number, lng: a.lng as number }]));
++
++console.log(`대상: 좌표 있는 조합 ${plan.candidateTotal}개 중 ${plan.todo.length}개를 이번에 계산 (최근 실측 ${plan.fresh}개 건너뜀, 좌표 없음 ${plan.noCoords}개 제외)`);
++if (!plan.todo.length) { console.log('계산할 것이 없어요.'); process.exit(0); }
++
++let saved = 0, failed = 0;
++const errors: string[] = [];
++for (const [idx, row] of plan.todo.entries()) {
++  const region = regionRows.find(r => r.id === row.region_id)!;
++  const airport = byCode.get(row.airport);
++  if (!airport) continue;
++  const source = sources.find(s => s.mode === row.mode)!;
++  try {
++    const minutes = await source.minutes(
++      { lat: region.lat as number, lng: region.lng as number },
++      { lat: airport.lat, lng: airport.lng },
++      new Date(),
++    );
++    if (dry) console.log(`  [dry] ${label.get(row.region_id)} → ${airport.name} ${row.mode} ${minutes}분`);
++    else {
++      const { error } = await admin.from('access_times').upsert({
++        region_id: row.region_id, airport: row.airport, mode: row.mode,
++        minutes, source: source.name, fetched_at: new Date().toISOString(), is_sample: false,
++      }, { onConflict: 'region_id,airport,mode' });
++      if (error) throw new Error(error.message);
++      console.log(`  저장  ${label.get(row.region_id)} → ${airport.name} ${row.mode} ${minutes}분  (${source.name})`);
++    }
++    saved++;
++  } catch (e) {
++    failed++;
++    const msg = `${label.get(row.region_id)} → ${airport.name} ${row.mode}: ${(e as Error).message}`;
++    errors.push(msg);
++    console.error(`  오류  ${msg}`);
++    if ((e as { code?: string }).code === 'KEY') { console.error('키가 거부돼 중단합니다.'); break; }
++  }
++  if (delay) await new Promise(r => setTimeout(r, delay));
++  if ((idx + 1) % 25 === 0) console.log(`  … ${idx + 1}/${plan.todo.length}`);
++}
++
++console.log(`\n결과: 계산 ${saved} · 오류 ${failed} · 남은 조합 약 ${Math.max(0, plan.candidateTotal - plan.fresh - plan.todo.length)}`);
++if (errors.length) console.log(`오류 예시: ${errors[0]}`);
++console.log('다음: npm run doctor 로 접근 시간이 얼마나 덮였는지 확인하세요.');
+diff --git a/scripts/geocode-regions.mts b/scripts/geocode-regions.mts
+new file mode 100644
+index 0000000..4a7bb79
+--- /dev/null
++++ b/scripts/geocode-regions.mts
+@@ -0,0 +1,65 @@
++// 행정구역 대표 좌표 채우기.
++//   npm run geocode-regions -- [--all] [--limit 250] [--delay 120] [--dry]
++//
++// 좌표가 없는 유효 구역만 대상으로 한다 (--all이면 전부 다시).
++// 카카오 로컬 API 주소 검색에 시·도/시·군/구 이름을 그대로 질의한다.
++import { createClient } from '@supabase/supabase-js';
++import { geocodeAddress, regionQuery } from '../lib/data/geocode';
++
++const arg = (name: string) => process.argv.includes(`--${name}`);
++const optNum = (name: string, fallback: number) => {
++  const i = process.argv.indexOf(`--${name}`);
++  const v = i >= 0 ? Number(process.argv[i + 1]) : NaN;
++  return Number.isFinite(v) ? v : fallback;
++};
++
++const need = (k: string) => {
++  const v = process.env[k];
++  if (!v) { console.error(`환경변수 ${k}가 없어요.`); process.exit(2); }
++  return v;
++};
++
++const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
++const admin = createClient(need('NEXT_PUBLIC_SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
++const key = need('KAKAO_REST_KEY');
++
++const all = arg('all'), dry = arg('dry');
++const limit = optNum('limit', 250), delay = optNum('delay', 120);
++
++let query = admin.from('regions').select('id, sido, sigungu, gu, full_name, lat, lng')
++  .or(`valid_to.is.null,valid_to.gte.${today}`)
++  .order('id');
++if (!all) query = query.is('lat', null);
++
++const { data: rows, error } = await query.limit(limit);
++if (error) { console.error(`regions 조회 실패: ${error.message}`); process.exit(2); }
++const targets = rows ?? [];
++console.log(`대상 ${targets.length}곳 (오늘 ${today}, --all=${all})`);
++if (!targets.length) process.exit(0);
++
++let ok = 0, miss = 0, failed = 0;
++for (const r of targets) {
++  const q = regionQuery(r as { sido: string; sigungu: string | null; gu: string | null });
++  try {
++    const point = await geocodeAddress(q, { key });
++    if (!point) { miss++; console.log(`  못 찾음  ${r.full_name}  ("${q}")`); continue; }
++    if (dry) { ok++; console.log(`  [dry]    ${r.full_name} → ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}  (${point.matched || q})`); }
++    else {
++      const { error: upErr } = await admin.from('regions')
++        .update({ lat: point.lat, lng: point.lng, geocoded_at: new Date().toISOString() }).eq('id', r.id);
++      if (upErr) throw new Error(upErr.message);
++      ok++;
++      console.log(`  저장     ${r.full_name} → ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}  (${point.matched || q})`);
++    }
++  } catch (e) {
++    failed++;
++    console.error(`  오류     ${r.full_name}: ${(e as Error).message}`);
++    // 키가 거부되면 나머지도 전부 실패한다 — 즉시 멈춘다
++    if ((e as { code?: string }).code === 'KEY') break;
++  }
++  if (delay) await new Promise(r => setTimeout(r, delay));
++}
++
++console.log(`\n결과: 저장 ${ok} · 못 찾음 ${miss} · 오류 ${failed}`);
++if (miss) console.log('못 찾은 구역은 이름이 행정구역 개편 전 표기이거나, 카카오 주소 DB에 없는 이름이에요. 그 구역은 좌표가 없어 접근 시간을 계산할 수 없어요.');
++console.log('다음: npm run access-times 로 이동 시간을 채우고, npm run doctor 로 덮인 비율을 확인하세요.');
+diff --git a/supabase/migrations/20260925152000_region_coords.sql b/supabase/migrations/20260925152000_region_coords.sql
+new file mode 100644
+index 0000000..bd17a67
+--- /dev/null
++++ b/supabase/migrations/20260925152000_region_coords.sql
+@@ -0,0 +1,20 @@
++-- 집 → 공항 이동 시간을 계산하려면 거주 지역의 좌표가 필요하다.
++-- access-time.ts는 "regions 대표 좌표 기준"이라고 적혀 있었지만 regions에 좌표 컬럼이 없어
++-- 계산 경로 자체가 막혀 있었다. 여기서 컬럼을 만들고, scripts/geocode-regions.mts가 채운다.
++--
++-- 좌표 기준: 카카오 로컬 API 주소 검색의 (x=경도, y=위도). 시·도/시·군·구 이름을 그대로 질의한다.
++-- 구(區)가 있는 구역은 구 이름까지 붙여 질의하므로, 구가 없는 시·군은 시청 좌표가 잡힌다.
++alter table public.regions
++  add column lat double precision,
++  add column lng double precision,
++  add column geocoded_at timestamptz;
++
++-- 좌표가 채워진 정도를 바로 세기 위한 인덱스 (doctor의 regions-coords 게이트가 쓴다)
++create index regions_geocoded_idx on public.regions (geocoded_at) where geocoded_at is not null;
++
++comment on column public.regions.lat is '대표 좌표 위도 (카카오 로컬 API 주소 검색)';
++comment on column public.regions.lng is '대표 좌표 경도 (카카오 로컬 API 주소 검색)';
++
++-- 좌표가 이미 있는데 is_sample인 접근 시간은 실측으로 덮어쓸 수 있어야 하므로,
++-- 같은 (지역, 공항, 수단)에 샘플과 실측이 공존할 수 없다는 제약은 그대로 두고
++-- 배치가 upsert로 is_sample을 false로 바꾼다 (unique (region_id, airport, mode) 활용).
+-- 
+2.43.0
+

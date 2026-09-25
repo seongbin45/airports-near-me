@@ -39,3 +39,12 @@ AI가 쓴 문장은 `lib/ai/verify.ts`가 코드로만 검사한다(LLM 재검�
 - 값과 상관없이 차단: 금액·요금, 지연·결항·좌석·날씨, 전화번호·이메일·링크 — 추천 DB에 AI에게 준 근거가 없다
 - AI가 "사용했다"고 밝힌 편명(`used_flight_nos`)이 문장에 없거나 DB에 없으면 차단
 - 검증 중 예외가 나면 차단 (fail-closed)
+
+## 지도 API 예비 체계 (2026-09-25 추가)
+
+| 값 | 위치 | 상태 |
+|---|---|---|
+| TMAP 경로안내 응답 `features[0].properties.totalTime`(초)·오류 형식 | `parseTmapRoute` | 문서 기준, **키로 실측 전** |
+| 네이버 Directions 5 `route.traoptimal[0].summary.duration`(밀리초)·Geocoding `addresses[].x/y`, 도메인 `maps.apigw.ntruss.com` | `parseNaverDriving`, `parseNaverGeocode` | 문서 기준, **키로 실측 전** |
+| OSRM·Nominatim 공용 서버 | `osrmCarSource`, `nominatimGeocoder` | 실제 호출로 확인. 실시간 교통 미반영(OSRM), 초당 1회 정책 |
+| 제공자마다 소요시간 기준이 다름 (카카오: 교통 반영 추천 경로, OSRM: 도로 속도만) | `access_times.source` | 출처를 행마다 저장. `npm run doctor`가 출처별 분포를 보여준다 |

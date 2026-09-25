@@ -318,7 +318,7 @@ describe('dataHealth — 데이터 상태 게이트', () => {
   const base: HealthInput = {
     schedules: { total: 10, real: 10, sample: 0, bySource: { KAC: 10 }, coveringToday: 10, lastSyncedAt: '2026-09-25T03:00:00Z', publishedUntil: '2026-10-31' },
     runs: [{ job: 'kac-full', ok: true, startedAt: new Date(Date.now() - 3600_000).toISOString(), finishedAt: new Date(Date.now() - 3600_000).toISOString(), aborted: null, failed: 0, note: null }],
-    access: { rows: 6, regions: 1, airports: 3, sample: 6 },
+    access: { rows: 3558, regions: 256, airports: 15, sample: 0 },
     regions: { active: 250, withCoords: 250 },
     fetch: { errors: 0, empty: 3 },
     today: '2026-09-25',
@@ -353,6 +353,11 @@ describe('dataHealth — 데이터 상태 게이트', () => {
     const r = dataHealth({ ...base, access: { rows: 0, regions: 0, airports: 0, sample: 0 } });
     expect(r.gates.find(g => g.id === 'access-times')!.ok).toBe(false);
     expect(r.exitCode).toBe(1);
+  });
+  it('화면용 샘플만 있으면 통과가 아니다', () => {
+    const g = gate({ ...base, access: { rows: 6, regions: 1, airports: 3, sample: 6 } }, 'access-times');
+    expect(g.ok).toBe(false);
+    expect(g.detail).toContain('샘플');
   });
   it('좌표가 비면 주의지만 종료 코드는 유지된다', () => {
     const r = dataHealth({ ...base, regions: { active: 250, withCoords: 3 } });

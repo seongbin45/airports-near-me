@@ -108,11 +108,14 @@ export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } 
     },
     {
       id: 'access-times',
-      ok: i.access.rows > 0 && i.access.regions > 0,
-      headline: `접근 시간 ${i.access.rows}건 · 지역 ${i.access.regions}곳 · 공항 ${i.access.airports}곳`,
+      // 화면용 샘플만 있으면 통과가 아니다 — 실측이 한 건이라도 있어야 한다
+      ok: i.access.rows - i.access.sample > 0 && i.access.regions > 0,
+      headline: `접근 시간 ${i.access.rows}건(실측 ${i.access.rows - i.access.sample}) · 지역 ${i.access.regions}곳 · 공항 ${i.access.airports}곳`,
       detail: i.access.rows === 0
         ? '집에서 공항까지 걸리는 시간이 DB에 없어요. 이 서비스의 핵심 계산이라, 없으면 거주지가 등록된 사용자도 추천을 받을 수 없어요.'
-        : `샘플 ${i.access.sample}건 포함 · 아직 전국을 덮지 못했어요`,
+        : i.access.rows === i.access.sample
+          ? `화면용 샘플 ${i.access.sample}건뿐이에요. npm run access-times 로 실측을 채우세요.`
+          : `샘플 ${i.access.sample}건 포함`,
       critical: true,
     },
     {
