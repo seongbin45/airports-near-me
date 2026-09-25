@@ -10,6 +10,8 @@ export const DOMESTIC_BUFFER_MIN = 40;
 export interface AccessTime {
   airport: string;
   airportName: string;
+  /** 공항이 속한 도시 (airports.city). AI 문장 검증에서 도시 이름을 허용하려고 쓴다 */
+  city?: string | null;
   minutes: number;
   source: string;
 }
@@ -29,6 +31,8 @@ export interface Flight {
 export interface RecommendRow {
   airport: string;
   airportName: string;
+  /** 공항이 속한 도시 (airports.city). 예: 김포 → 서울 */
+  airportCity: string | null;
   accessMin: number;
   accessSource: string;
   flightId: number;
@@ -76,7 +80,7 @@ export function recommend(
     if (!f) { noFlightInTime.push(a.airportName); continue; }
     const dep = hhmm(f.dep_time), arr = hhmm(f.arr_time);
     rows.push({
-      airport: a.airport, airportName: a.airportName, accessMin: a.minutes, accessSource: a.source,
+      airport: a.airport, airportName: a.airportName, airportCity: a.city ?? null, accessMin: a.minutes, accessSource: a.source,
       flightId: f.id, flightNo: f.flight_no, dep, arr,
       slackMin: toMin(dep) - atAirport, totalMin: toMin(arr) - start, isSample: f.is_sample,
       source: f.source ?? '운항 스케줄 DB', syncedAt: f.synced_at ?? null, fare: f.economy_fare ?? null,

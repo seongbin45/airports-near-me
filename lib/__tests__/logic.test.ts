@@ -8,9 +8,9 @@ import { parseDate } from '../time';
 
 // 프로토타입(design/공항 찾기 대화.dc.html)과 같은 샘플 값
 const access: AccessTime[] = [
-  { airport: 'GMP', airportName: '김포', minutes: 55, source: '카카오모빌리티 경로' },
-  { airport: 'CJJ', airportName: '청주', minutes: 80, source: '카카오모빌리티 경로' },
-  { airport: 'ICN', airportName: '인천', minutes: 95, source: '카카오모빌리티 경로' },
+  { airport: 'GMP', airportName: '김포', city: '서울', minutes: 55, source: '카카오모빌리티 경로' },
+  { airport: 'CJJ', airportName: '청주', city: '청주', minutes: 80, source: '카카오모빌리티 경로' },
+  { airport: 'ICN', airportName: '인천', city: '인천', minutes: 95, source: '카카오모빌리티 경로' },
 ];
 let id = 0;
 const f = (flight_no: string, origin: string, dep: string, arr: string): Flight =>
@@ -137,7 +137,7 @@ describe('parseDate', () => {
   });
 });
 
-import { parseTime, reasonCrossCheck, sameReason } from '../chat/flow';
+import { checkReason, parseTime, reasonCrossCheck, sameReason } from '../chat/flow';
 
 describe('chat flow', () => {
   const visits = [
@@ -159,5 +159,36 @@ describe('chat flow', () => {
     expect(parseTime('9시')).toBe('09:00');
     expect(parseTime('25:00')).toBeNull();
     expect(parseTime('제주')).toBeNull();
+  });
+});
+
+
+describe('verifyAgainstDb — 문장 안 사실 조합', () => {
+  const { rows } = recommend('14:30', access, jeju);
+  const ctx = { rows, departure: '14:30', dest: '제주', date: '2026-10-02' };
+  it('편명과 공항을 바꿔 붙이면 실패 (값은 각각 DB에 있지만 조합이 틀림)', () => {
+    const v = verifyAgainstDb('청주공항에서 A 1207편을 타세요.', ctx);
+    expect(v.ok).toBe(false);
+    expect(v.detail.pairing.mismatched).toEqual(['청주↔A 1207']);
+  });
+  it('그 편이 아닌 다른 공항의 시각을 붙이면 실패', () => {
+    const v = verifyAgainstDb('A 1207편은 16:40에 출발해요.', ctx);
+    expect(v.detail.pairing.mismatched).toContain('시각 16:40↔A 1207');
+  });
+  it('공항이 있는 도시 이름은 통과 (김포공항 → 서울)', () => {
+    expect(verifyAgainstDb('서울에서 16:10 A 1207편을 타면 17:20에 제주에 도착해요.', ctx, ['A 1207']).ok).toBe(true);
+  });
+  it('다른 공항을 함께 언급한 비교 문장은 통과', () => {
+    expect(verifyAgainstDb('청주 16:40편보다 김포 16:10 A 1207편이 빨라요.', ctx).ok).toBe(true);
+  });
+});
+
+describe('checkReason', () => {
+  it('빈 값·너무 긴 값·금액·연락처는 입구에서 막는다', () => {
+    expect(checkReason('출장')).toBeNull();
+    expect(checkReason('  ')).toContain('입력');
+    expect(checkReason('6만원 이하로')).toContain('금액');
+    expect(checkReason('010-1234-5678로 연락')).toContain('금액');
+    expect(checkReason('가'.repeat(61))).toContain('60자');
   });
 });

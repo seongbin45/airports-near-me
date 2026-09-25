@@ -38,7 +38,7 @@ export async function loadRecommendation(supabase: SupabaseClient, userId: strin
   if (error) throw error;
 
   const [access, destAirports] = await Promise.all([
-    supabase.from('access_times').select('airport, minutes, source, airports(name_ko)').eq('region_id', profile.region_id ?? -1).eq('mode', t.mode),
+    supabase.from('access_times').select('airport, minutes, source, airports(name_ko, city)').eq('region_id', profile.region_id ?? -1).eq('mode', t.mode),
     supabase.from('airports').select('code').eq('city', t.dest),
   ]);
   if (access.error) throw access.error;
@@ -61,7 +61,8 @@ export async function loadRecommendation(supabase: SupabaseClient, userId: strin
 
   const accessTimes: AccessTime[] = access.data.map(a => ({
     airport: a.airport, minutes: a.minutes, source: a.source,
-    airportName: (a.airports as unknown as { name_ko: string } | null)?.name_ko.replace('국제공항', '') ?? a.airport,
+    airportName: (a.airports as unknown as { name_ko: string; city: string } | null)?.name_ko.replace('국제공항', '') ?? a.airport,
+    city: (a.airports as unknown as { name_ko: string; city: string } | null)?.city ?? null,
   }));
   return { ...recommend(t.departure, accessTimes, pickBestSource(inSeason as Flight[])), regionMissing: !accessTimes.length, onDemand, publishedUntil: until?.valid_to ?? null };
 }
