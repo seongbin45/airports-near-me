@@ -37,7 +37,7 @@ describe('configuredProviders', () => {
       ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o', /* OPENAI_MODEL 없음 */
       GEMINI_API_KEY: 'g', GOOGLE_API_KEY: 'gg', GEMINI_MODEL: 'gm',
     });
-    expect(ps.map(p => [p.id, p.model, p.apiKey])).toEqual([['gemini', 'gm', 'gg'], ['claude', 'claude-opus-5', 'a']]);
+    expect(ps.map(p => [p.id, p.model, p.apiKey])).toEqual([['gemini', 'gm', 'gg'], ['claude', 'claude-opus-5-5', 'a']]);
   });
 });
 

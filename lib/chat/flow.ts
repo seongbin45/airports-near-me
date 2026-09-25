@@ -37,3 +37,24 @@ export function parseTime(text: string): string | null {
   }
   return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
 }
+
+
+// ───────────── 방문 이유 입력 규칙 ─────────────
+
+/** 방문 이유 최대 길이 */
+export const REASON_MAX = 60;
+
+/**
+ * 방문 이유에 쓸 수 없는 표현. 이유는 그대로 AI에게 넘어가고, AI가 그 값을 되받아 쓰면
+ * verify.ts의 금지 규칙(금액·연락처·링크)에 걸린다. 그러면 그 여정은 계속 답을 못 받으므로 입구에서 막는다.
+ */
+const REASON_FORBIDDEN = /\d[\d,]*\s*원|\d+\s*만\s*원|https?:\/\/|0\d{1,2}-?\d{3,4}-?\d{4}|[\w.+-]+@[\w-]+\.[\w.]+/;
+
+/** 저장 가능한 방문 이유인지. 문제가 있으면 화면에 보여줄 문장을 돌려준다. */
+export function checkReason(reason: string): string | null {
+  const t = reason.trim();
+  if (!t) return '방문 이유를 입력해 주세요.';
+  if (t.length > REASON_MAX) return `방문 이유는 ${REASON_MAX}자까지 쓸 수 있어요.`;
+  if (REASON_FORBIDDEN.test(t)) return '방문 이유에는 금액·연락처·링크를 쓸 수 없어요.';
+  return null;
+}

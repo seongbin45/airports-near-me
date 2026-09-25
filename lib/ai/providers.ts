@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // AI 제공자 예비 체계 (reference/…/generate/client.py·draft.py의 폴백 체인을 이 서비스에 맞춘 것)
 // - 순서: AI_PROVIDERS (기본 claude,openai,gemini,xai). 키와 모델 id가 모두 있는 제공자만 쓴다.
-// - 모델 id는 env로 받는다(Claude만 기본값 claude-opus-5). 모델 이름을 코드에 박지 않는다.
+// - 모델 id는 env로 받는다(Claude만 기본값 claude-opus-5-5). 모델 이름을 코드에 박지 않는다.
 // - 일시 오류(408/409/425/429/5xx/네트워크)는 AI_HTTP_RETRIES회 재시도 후 다음 제공자로.
 // - 형식이 틀린 답(JSON 아님)도 다음 제공자로. 거절(refusal)은 다른 회사로 넘기지 않고 멈춘다.
 // - 어느 제공자든 답은 같은 JSON 형식이고, 같은 DB 대조(verifyAgainstDb)를 통과해야만 보인다.
@@ -46,7 +46,7 @@ type Env = Record<string, string | undefined>;
 export function configuredProviders(env: Env = process.env): Provider[] {
   const order = (env.AI_PROVIDERS ?? 'claude,openai,gemini,xai').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const table: Record<ProviderId, { key?: string; model?: string }> = {
-    claude: { key: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || 'claude-opus-5' },
+    claude: { key: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || 'claude-opus-5-5' },
     openai: { key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL },
     // 공식 클라이언트와 같게: 둘 다 있으면 GOOGLE_API_KEY
     gemini: { key: env.GOOGLE_API_KEY || env.GEMINI_API_KEY, model: env.GEMINI_MODEL },
@@ -75,6 +75,8 @@ function parseJson(raw: string): AiJson {
 
 interface Call { system: string; user: string; fetchImpl: typeof fetch; retries: number }
 
+interface AiText { text: string; model: string | null; usage: unknown }
+
 async function postJson(fetchImpl: typeof fetch, url: string, headers: Record<string, string>, body: unknown) {
   let res: Response;
   try {
@@ -86,7 +88,7 @@ async function postJson(fetchImpl: typeof fetch, url: string, headers: Record<st
   return res.json() as Promise<Record<string, unknown>>;
 }
 
-async function callClaude(p: Provider, c: Call): Promise<string> {
+async function callClaude(p: Provider, c: Call): Promise<AiText> {
   // SDK 자체 재시도는 끄고 이 파일의 재시도 규칙을 쓴다
   const client = new Anthropic({ apiKey: p.apiKey, maxRetries: 0, fetch: c.fetchImpl });
   try {
@@ -101,7 +103,11 @@ async function callClaude(p: Provider, c: Call): Promise<string> {
       messages: [{ role: 'user', content: c.user }],
     });
     if (response.stop_reason === 'refusal') throw new RefusedError('refusal');
-    return response.content.flatMap(b => (b.type === 'text' ? [b.text] : [])).join('');
+    return {
+      text: response.content.flatMap(b => (b.type === 'text' ? [b.text] : [])).join(''),
+      model: String(response.model ?? p.model),
+      usage: response.usage ?? null,
+    };
   } catch (e) {
     if (e instanceof RefusedError) throw e;
     if (e instanceof Anthropic.APIError) throw new ProviderError(`HTTP ${e.status ?? '?'} ${e.message}`, e.status == null || TRANSIENT.has(e.status), e.status);
@@ -109,7 +115,7 @@ async function callClaude(p: Provider, c: Call): Promise<string> {
   }
 }
 
-async function callOpenAiCompatible(base: string, p: Provider, c: Call, strictSchema: boolean): Promise<string> {
+async function callOpenAiCompatible(base: string, p: Provider, c: Call, strictSchema: boolean): Promise<AiText> {
   const body = await postJson(c.fetchImpl, `${base}/chat/completions`, { authorization: `Bearer ${p.apiKey}` }, {
     model: p.model,
     messages: [{ role: 'system', content: c.system }, { role: 'user', content: c.user }],
@@ -120,10 +126,10 @@ async function callOpenAiCompatible(base: string, p: Provider, c: Call, strictSc
   const choice = (body.choices as { message?: { content?: string; refusal?: string } }[] | undefined)?.[0]?.message;
   if (choice?.refusal) throw new RefusedError('refusal');
   if (typeof choice?.content !== 'string') throw new ParseError('빈 응답');
-  return choice.content;
+  return { text: choice.content, model: String(body.model ?? p.model), usage: body.usage ?? null };
 }
 
-async function callGemini(p: Provider, c: Call): Promise<string> {
+async function callGemini(p: Provider, c: Call): Promise<AiText> {
   // 키는 URL이 아니라 헤더로 보낸다 (로그에 URL이 남아도 키가 새지 않게)
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent`;
   const body = await postJson(c.fetchImpl, url, { 'x-goog-api-key': p.apiKey }, {
@@ -135,10 +141,10 @@ async function callGemini(p: Provider, c: Call): Promise<string> {
   if (cand?.finishReason === 'SAFETY' || cand?.finishReason === 'PROHIBITED_CONTENT') throw new RefusedError('refusal');
   const text = cand?.content?.parts?.map(x => x.text ?? '').join('');
   if (!text) throw new ParseError('빈 응답');
-  return text;
+  return { text, model: String(body.modelVersion ?? p.model), usage: body.usageMetadata ?? null };
 }
 
-function callOnce(p: Provider, c: Call): Promise<string> {
+function callOnce(p: Provider, c: Call): Promise<AiText> {
   switch (p.id) {
     case 'claude': return callClaude(p, c);
     case 'openai': return callOpenAiCompatible('https://api.openai.com/v1', p, c, true);
@@ -152,7 +158,15 @@ export interface Attempt { provider: ProviderId; model: string; tries: number; e
 export interface ChainResult {
   output: AiJson | null;
   provider: ProviderId | null;
+  /** 체인에서 고른(요청한) 모델 */
   model: string | null;
+  /**
+   * 실제로 답을 만든 모델. Anthropic 서버 측 폴백(server-side-fallback)이나 모델 라우팅이 일어나면
+   * 요청 모델과 다르다 — 이 값은 응답 최상위 model 필드에서만 알 수 있다.
+   */
+  servedModel: string | null;
+  /** 제공자 응답의 사용량 기록. Anthropic은 usage.iterations에 fallback_message를 남긴다 */
+  usage: unknown;
   refused: boolean;
   /** 모든 제공자가 형식이 틀린 답을 줬다 */
   parseError: boolean;
@@ -179,12 +193,13 @@ export async function completeWithFallback(
     for (;;) {
       a.tries++;
       try {
-        const output = parseJson(await callOnce(p, call));
-        return { output, provider: p.id, model: p.model, refused: false, parseError: false, attempts };
+        const res = await callOnce(p, call);
+        const output = parseJson(res.text);
+        return { output, provider: p.id, model: p.model, servedModel: res.model, usage: res.usage, refused: false, parseError: false, attempts };
       } catch (e) {
         if (e instanceof RefusedError) {
           a.error = '거절';
-          return { output: null, provider: p.id, model: p.model, refused: true, parseError: false, attempts };
+          return { output: null, provider: p.id, model: p.model, servedModel: null, usage: null, refused: true, parseError: false, attempts };
         }
         if (e instanceof ParseError) { a.error = e.message; sawParseError = true; break; }
         const pe = e as ProviderError;
@@ -194,5 +209,5 @@ export async function completeWithFallback(
       }
     }
   }
-  return { output: null, provider: null, model: null, refused: false, parseError: sawParseError, attempts };
+  return { output: null, provider: null, model: null, servedModel: null, usage: null, refused: false, parseError: sawParseError, attempts };
 }

@@ -4,6 +4,7 @@ import { isTripInput, loadRecommendation } from '@/lib/server/trip';
 import { hasAiKey, writeWithAi, type AiKind } from '@/lib/ai/client';
 import { PROVIDER_LABEL } from '@/lib/ai/providers';
 import { verifyAgainstDb } from '@/lib/ai/verify';
+import { checkReason } from '@/lib/chat/flow';
 
 // AI 호출은 이 라우트 한 곳뿐이고, 화면의 "AI 요약 받기" / "AI에게 보내기" 버튼으로만 불린다.
 // 추천 결과는 클라이언트 값을 믿지 않고 DB에서 다시 계산하며, AI 문장은 DB 대조를 통과해야만 돌려준다.
@@ -17,6 +18,10 @@ export async function POST(request: Request) {
   if (!isTripInput(body) || typeof body.reason !== 'string' || (kind === 'question' && !question.trim())) {
     return NextResponse.json({ error: '요청이 잘못됐어요.' }, { status: 400 });
   }
+  // 방문 이유는 사용자가 쓴 자유 입력이고 그대로 AI에게 넘어간다. 금액·연락처·링크를 넣으면
+  // AI가 그 값을 되받아 쓰는 순간 검증기의 금지 규칙에 걸려 그 여정은 계속 답을 못 받는다. 입구에서 막는다.
+  const reasonError = checkReason(body.reason);
+  if (reasonError) return NextResponse.json({ error: reasonError }, { status: 400 });
   if (!hasAiKey()) return NextResponse.json({ error: '쓸 수 있는 AI 제공자가 없어요(키·모델 미설정). 관리자에게 문의해 주세요.' }, { status: 503 });
 
   const { data: profile } = await supabase.from('profiles').select('ai_enabled').eq('id', user.id).single();
@@ -26,7 +31,7 @@ export async function POST(request: Request) {
   const prompt = kind === 'summary' ? 'AI 요약 받기' : question;
 
   const out = await writeWithAi(kind, body, body.reason, rec, question);
-  const { refused, parseError, provider, model, attempts } = out;
+  const { refused, parseError, provider, model, servedModel, usage, attempts } = out;
   const text = out.output?.text ?? null;
   const usedFlightNos = out.output?.used_flight_nos ?? [];
   // 모든 제공자가 일시 오류로 실패 (형식 오류·거절이 아님)
@@ -35,7 +40,8 @@ export async function POST(request: Request) {
   const verified = !!v?.ok;
   await supabase.from('ai_calls').insert({
     trip_id: Number.isInteger(body.tripId) ? body.tripId : null,
-    kind, prompt, response: text, verified, provider, model, attempts,
+    // model은 체인에서 고른 모델, served_model은 실제로 답한 모델 (서버 측 폴백이 일어나면 다르다)
+    kind, prompt, response: text, verified, provider, model, served_model: servedModel, usage, attempts,
     verify_detail: v?.detail ?? (refused ? { refused: true } : parseError ? { parseError: true } : unavailable ? { unavailable: true } : null),
   });
   if (unavailable) {

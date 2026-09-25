@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getUser } from '@/lib/supabase/server';
 import { isTripInput, loadRecommendation } from '@/lib/server/trip';
+import { checkReason } from '@/lib/chat/flow';
 
 // 추천 계산 + trips 기록. 입력은 목적지·날짜·출발 시각·이동수단·방문 이유.
 export async function POST(request: Request) {
@@ -8,6 +9,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
   const body = await request.json();
   if (!isTripInput(body) || typeof body.reason !== 'string') return NextResponse.json({ error: '요청이 잘못됐어요.' }, { status: 400 });
+  const reasonError = checkReason(body.reason);
+  if (reasonError) return NextResponse.json({ error: reasonError }, { status: 400 });
 
   const rec = await loadRecommendation(supabase, user.id, body);
   // 결과 화면에서 이동수단만 바꿔 다시 볼 때는 새 여정으로 기록하지 않는다
