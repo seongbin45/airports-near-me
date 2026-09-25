@@ -138,7 +138,8 @@ describe('parseDate', () => {
 });
 
 import { checkReason, parseTime, reasonCrossCheck, sameReason } from '../chat/flow';
-import { confirmableError, pendingFromTrips, visitFromTrip, type TripRow } from '../visits';
+import { confirmableError, pendingFromTrips, pendingVisits, visitFromTrip, type CandidateRow, type TripRow } from '../visits';
+import { inferTimelineTrips, parseAirportVisits, summarizeTimeline, type AirportPoint } from '../data/timeline-import';
 
 describe('chat flow', () => {
   const visits = [
@@ -246,5 +247,68 @@ describe('kstToday', () => {
   it('서버 시간대와 무관하게 한국 날짜', () => {
     expect(kstToday(new Date('2026-09-25T14:59:59Z'))).toBe('2026-09-25');
     expect(kstToday(new Date('2026-09-25T15:00:00Z'))).toBe('2026-09-26');
+  });
+});
+
+
+describe('타임라인 가져오기 — 지점 파싱과 여정 추정', () => {
+  const apts: AirportPoint[] = [
+    { code: 'GMP', name_ko: '김포국제공항', city: '서울', lat: 37.5583, lng: 126.7906 },
+    { code: 'CJU', name_ko: '제주국제공항', city: '제주', lat: 33.5113, lng: 126.4930 },
+    { code: 'PUS', name_ko: '김해국제공항', city: '부산', lat: 35.1795, lng: 128.9382 },
+  ];
+  const seg = (at: string, latLng?: string) => ({ startTime: at, ...(latLng ? { visit: { topCandidate: { placeLocation: { latLng } } } } : {}) });
+  const gmp = seg('2026-09-20T08:10:00.000+09:00', '37.558°, 126.790°');
+  const cju = seg('2026-09-20T10:30:00.000+09:00', '33.511°, 126.493°');
+  const gmpBack = seg('2026-09-23T19:00:00.000+09:00', '37.559°, 126.791°');
+  const home = seg('2026-09-20T07:00:00.000+09:00', '37.250°, 127.020°');
+
+  it('타임라인 형식이 아니면 알려준다', () => {
+    expect(() => parseAirportVisits({}, apts)).toThrow('타임라인 형식');
+  });
+  it('공항 반경 안의 지점만 공항 방문으로 남는다', () => {
+    const v = parseAirportVisits({ semanticSegments: [home, gmp, cju] }, apts);
+    expect(v.map(x => x.code)).toEqual(['GMP', 'CJU']);
+    expect(v[0].date).toBe('2026-09-20');
+  });
+  it('왕복은 한 건으로 묶고 귀국일을 남긴다', () => {
+    expect(inferTimelineTrips(parseAirportVisits({ semanticSegments: [home, gmp, cju, gmpBack] }, apts), apts))
+      .toEqual([{ from_airport: 'GMP', dest_airport: 'CJU', dest_city: '제주', depart_on: '2026-09-20', return_on: '2026-09-23' }]);
+  });
+  it('편도면 귀국일 없이 한 건', () => {
+    expect(inferTimelineTrips(parseAirportVisits({ semanticSegments: [gmp, cju] }, apts), apts))
+      .toEqual([{ from_airport: 'GMP', dest_airport: 'CJU', dest_city: '제주', depart_on: '2026-09-20', return_on: null }]);
+  });
+  it('출발·도착이 MAX_HOP_DAYS보다 멀면 여정으로 보지 않는다', () => {
+    const late = seg('2026-09-25T10:30:00.000+09:00', '33.511°, 126.493°');
+    expect(inferTimelineTrips(parseAirportVisits({ semanticSegments: [gmp, late] }, apts), apts)).toEqual([]);
+  });
+  it('도시를 모르는 공항으로 간 구간은 후보에서 뺀다', () => {
+    const noCity: AirportPoint[] = [apts[0]];
+    expect(inferTimelineTrips(parseAirportVisits({ semanticSegments: [gmp, cju] }, noCity), noCity)).toEqual([]);
+  });
+  it('같은 파일을 두 번 올려도 같은 여정은 한 번만', () => {
+    expect(inferTimelineTrips(parseAirportVisits({ semanticSegments: [gmp, cju, gmpBack, gmp, cju] }, apts), apts).length).toBe(1);
+  });
+  it('요약은 방문 지점 수·공항 방문 수·기간을 준다', () => {
+    const s = summarizeTimeline({ semanticSegments: [home, gmp, cju, gmpBack] }, apts);
+    expect(s).toMatchObject({ places: 4, airportVisits: 3, from: '2026-09-20', to: '2026-09-23' });
+    expect(s.byAirport).toEqual({ GMP: 2, CJU: 1 });
+  });
+});
+
+describe('pendingVisits — 대화 여정과 파일 후보를 한 목록으로', () => {
+  const today = '2026-09-25';
+  const trip: TripRow = { id: 1, dest_city: '제주', trip_date: '2026-09-20', reason: '출장', chosen_origin: 'GMP' };
+  const cand: CandidateRow = { id: 9, dest_city: '부산', visited_on: '2026-06-20', from_airport: 'GMP', reason: null, source: 'google_timeline', dismissed_at: null };
+  it('출처를 구분해 최신순으로 합친다', () => {
+    const out = pendingVisits([trip], [cand], [], today);
+    expect(out.map(x => [x.kind, x.dest_city, x.visited_on])).toEqual([['trip', '제주', '2026-09-20'], ['timeline', '부산', '2026-06-20']]);
+    expect(out[1].source).toBe('Timeline.json');
+  });
+  it('이미 기록이 있는 날짜·지운 후보·미래 날짜는 뺀다', () => {
+    expect(pendingVisits([], [cand], [{ dest_city: '부산', visited_on: '2026-06-20' }], today)).toEqual([]);
+    expect(pendingVisits([], [{ ...cand, dismissed_at: '2026-09-01T00:00:00Z' }], [], today)).toEqual([]);
+    expect(pendingVisits([], [{ ...cand, visited_on: today }], [], today)).toEqual([]);
   });
 });

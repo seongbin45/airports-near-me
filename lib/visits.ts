@@ -40,6 +40,67 @@ export function pendingFromTrips(trips: TripRow[], visits: VisitRow[], today: st
 
 const key = (dest: string, day: string) => `${dest}|${day.slice(0, 10)}`;
 
+/** 파일(타임라인·캘린더)에서 온 확인 대기 후보 행 */
+export interface CandidateRow {
+  id: number;
+  dest_city: string;
+  visited_on: string;
+  from_airport: string | null;
+  reason: string | null;
+  source: string;
+  dismissed_at: string | null;
+}
+
+/** 화면이 다루는 확인 대기 한 건. 출처(대화 여정 / 파일)를 kind로 구분한다. */
+export interface PendingVisit {
+  kind: 'trip' | 'timeline';
+  id: number;
+  dest_city: string;
+  visited_on: string;
+  from_airport: string | null;
+  reason: string | null;
+  source: string;
+}
+
+/**
+ * 확인 대기 목록 = 대화 여정 + 파일 후보.
+ * 둘 다 확인 전에는 기록(visits)이 아니며, 이미 기록이 있는 날짜는 빼고 최신순으로 정렬한다.
+ */
+export function pendingVisits(trips: TripRow[], candidates: CandidateRow[], visits: VisitRow[], today: string): PendingVisit[] {
+  const recorded = new Set(visits.map(v => key(v.dest_city, v.visited_on)));
+  const fromTrips: PendingVisit[] = pendingFromTrips(trips, visits, today).map(t => ({
+    kind: 'trip', id: t.id, dest_city: t.dest_city, visited_on: t.trip_date,
+    from_airport: t.chosen_origin, reason: t.reason, source: '대화에서 확인',
+  }));
+  const fromFiles: PendingVisit[] = candidates
+    .filter(c => !c.dismissed_at && c.visited_on < today && !recorded.has(key(c.dest_city, c.visited_on)))
+    .map(c => ({
+      kind: 'timeline', id: c.id, dest_city: c.dest_city, visited_on: c.visited_on,
+      from_airport: c.from_airport, reason: c.reason, source: SOURCE_LABEL[c.source] ?? c.source,
+    }));
+  return [...fromTrips, ...fromFiles].sort((a, b) => b.visited_on.localeCompare(a.visited_on));
+}
+
+const SOURCE_LABEL: Record<string, string> = { google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
+
+/** 파일 후보 확인 가능 여부 */
+export function candidateError(c: CandidateRow, today: string): string | null {
+  if (c.dismissed_at) return '이미 지운 후보예요.';
+  if (c.visited_on >= today) return '아직 날짜가 지나지 않은 후보예요.';
+  return null;
+}
+
+/** 후보 → 방문 기록 행. 값은 DB의 후보 행에서만 가져온다 (클라이언트가 보낸 목적지·날짜를 믿지 않는다). */
+export function visitFromCandidate(c: CandidateRow, reason?: string | null) {
+  return {
+    dest_city: c.dest_city,
+    visited_on: c.visited_on,
+    reason: reason?.trim() || c.reason,
+    from_airport: c.from_airport,
+    source: c.source,
+  };
+}
+
 /** 확인할 수 없는 여정이면 이유 문장, 확인 가능하면 null */
 export function confirmableError(trip: TripRow, today: string): string | null {
   if (trip.trip_date >= today) return '아직 날짜가 지나지 않은 여정이에요.';

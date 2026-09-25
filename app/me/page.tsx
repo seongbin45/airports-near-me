@@ -3,7 +3,7 @@ import { getUser } from '@/lib/supabase/server';
 import MyData from '@/components/me/MyData';
 import type { VerifyDetail } from '@/lib/ai/verify';
 import { kstToday } from '@/lib/time';
-import { pendingFromTrips, type TripRow } from '@/lib/visits';
+import { pendingVisits, type CandidateRow, type TripRow } from '@/lib/visits';
 
 export default async function MePage() {
   const { supabase, user } = await getUser();
@@ -14,7 +14,7 @@ export default async function MePage() {
     .eq('id', user.id).single();
   if (!profile) redirect('/login');
 
-  const [classes, events, visits, aiCalls, consent, access, trips] = await Promise.all([
+  const [classes, events, visits, aiCalls, consent, access, trips, candidates, airports] = await Promise.all([
     supabase.from('class_timetable').select('name, days, start_time, end_time'),
     supabase.from('schedules').select('date, description, source'),
     supabase.from('visits').select('id, trip_id, dest_city, visited_on, reason, from_airport, source, is_sample').order('visited_on', { ascending: false }),
@@ -25,6 +25,12 @@ export default async function MePage() {
     supabase.from('trips')
       .select('id, dest_city, trip_date, reason, chosen_origin, chosen_flight_no, visit_dismissed_at')
       .lt('trip_date', kstToday()).order('trip_date', { ascending: false }).limit(50),
+    // 파일(타임라인)에서 넘어온 확인 대기 후보
+    supabase.from('visit_candidates')
+      .select('id, dest_city, visited_on, from_airport, reason, source, dismissed_at')
+      .order('visited_on', { ascending: false }).limit(200),
+    // 타임라인 파일 파싱에 쓰는 공항 좌표 (브라우저에서만 읽는다)
+    supabase.from('airports').select('code, name_ko, city, lat, lng').order('code'),
   ]);
 
   const p = profile as unknown as {
@@ -45,7 +51,8 @@ export default async function MePage() {
       classes={classes.data ?? []}
       events={events.data ?? []}
       visits={visits.data ?? []}
-      pending={pendingFromTrips((trips.data ?? []) as TripRow[], visits.data ?? [], kstToday())}
+      pending={pendingVisits((trips.data ?? []) as TripRow[], (candidates.data ?? []) as CandidateRow[], visits.data ?? [], kstToday())}
+      airports={airports.data ?? []}
       aiCalls={(aiCalls.data ?? []) as unknown as AiCallRow[]}
       hasConsent={!!consent.data?.length}
       access={(access.data ?? []) as unknown as AccessRow[]}

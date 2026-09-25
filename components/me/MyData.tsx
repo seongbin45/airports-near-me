@@ -9,7 +9,8 @@ import { DEFAULT_REASONS } from '@/lib/chat/flow';
 import { fmtDur, hhmm, toMin } from '@/lib/time';
 import type { AccessRow, AiCallRow } from '@/app/me/page';
 import { PROVIDER_LABEL, type ProviderId } from '@/lib/ai/providers-meta';
-import type { TripRow } from '@/lib/visits';
+import type { PendingVisit } from '@/lib/visits';
+import { inferTimelineTrips, parseAirportVisits, type AirportPoint } from '@/lib/data/timeline-import';
 
 interface Visit { id: number; trip_id: number | null; dest_city: string; visited_on: string; reason: string | null; from_airport: string | null; source: string; is_sample: boolean }
 
@@ -25,8 +26,10 @@ interface Props {
   classes: { name: string; days: string[]; start_time: string; end_time: string }[];
   events: { date: string; description: string; source: string }[];
   visits: Visit[];
-  /** 날짜가 지난 여정 중 아직 방문 기록으로 넘기지 않은 것 (확인 대기) */
-  pending: TripRow[];
+  /** 확인 대기: 대화 여정 + 타임라인 파일 후보 (아직 기록이 아님) */
+  pending: PendingVisit[];
+  /** 타임라인 파일 파싱용 공항 목록 */
+  airports: AirportPoint[];
   aiCalls: AiCallRow[];
   hasConsent: boolean;
   access: AccessRow[];
@@ -35,6 +38,8 @@ interface Props {
 const TABS = [['basic', '기본 정보'], ['trips', '방문 기록'], ['ai', 'AI 기록'], ['privacy', '개인정보']] as const;
 type Tab = (typeof TABS)[number][0];
 const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
+/** 타임라인 내보내기 파일 상한. 이보다 큰 파일을 JSON.parse하면 브라우저가 멈춘다 */
+const MAX_TIMELINE_BYTES = 50 * 1024 * 1024;
 // 가입 화면의 단계 번호 (수정 링크용)
 const STEP = { home: 1, type: 2, schedule: 3 };
 
@@ -60,6 +65,7 @@ export default function MyData(p: Props) {
   const [ai, setAi] = useState(p.aiEnabled);
   const [confirmDel, setConfirmDel] = useState(false);
   const [err, setErr] = useState('');
+  const [importMsg, setImportMsg] = useState('');
 
   const fail = (e: { message: string } | null) => { if (e) setErr(e.message); return !!e; };
 
@@ -91,16 +97,45 @@ export default function MyData(p: Props) {
     if (!res.ok) { setErr(json.error ?? '요청에 실패했어요.'); return null; }
     return json;
   }
-  async function confirmTrip(t: TripRow) {
-    const json = await visitApi({ action: 'confirm', tripId: t.id });
+  async function confirmPending(t: PendingVisit) {
+    const json = await visitApi(t.kind === 'trip'
+      ? { action: 'confirm', tripId: t.id }
+      : { action: 'confirm_candidate', candidateId: t.id });
     if (!json) return;
-    const v = json.visit as Visit;
-    setVisits(vs => [v, ...vs.filter(x => x.id !== v.id)]);
-    setPending(ps => ps.filter(x => x.id !== t.id));
+    const v = json.visit as Visit | undefined;
+    if (v) setVisits(vs => [v, ...vs.filter(x => x.id !== v.id)]);
+    setPending(ps => ps.filter(x => !(x.kind === t.kind && x.id === t.id)));
   }
-  async function dismissTrip(t: TripRow) {
-    if (!await visitApi({ action: 'dismiss', tripId: t.id })) return;
-    setPending(ps => ps.filter(x => x.id !== t.id));
+  async function dismissPending(t: PendingVisit) {
+    if (!await visitApi(t.kind === 'trip'
+      ? { action: 'dismiss', tripId: t.id }
+      : { action: 'dismiss_candidate', candidateId: t.id })) return;
+    setPending(ps => ps.filter(x => !(x.kind === t.kind && x.id === t.id)));
+  }
+
+  // 구글 타임라인 파일은 브라우저에서만 읽는다. 추정한 여정만 서버로 보내 확인 대기 후보로 넣는다.
+  async function importTimeline(file: File | undefined) {
+    if (!file) return;
+    setErr(''); setImportMsg('');
+    if (file.size > MAX_TIMELINE_BYTES) return setErr('타임라인 파일이 너무 커요(50MB 초과). 기간을 나눠서 내보내 주세요.');
+    let found: { from_airport: string; dest_airport: string; depart_on: string }[];
+    try {
+      const json = JSON.parse(await file.text());
+      found = inferTimelineTrips(parseAirportVisits(json, p.airports), p.airports);
+    } catch (e) {
+      return setErr((e as Error).message);
+    }
+    if (!found.length) return setImportMsg('이 파일에서는 공항에 다녀온 여정을 찾지 못했어요.');
+    const res = await visitApi({
+      action: 'import_timeline',
+      trips: found.map(t => ({ from_airport: t.from_airport, dest_airport: t.dest_airport, depart_on: t.depart_on })),
+    });
+    if (!res) return;
+    setImportMsg(`여정 ${found.length}건을 찾았고 ${res.added}건을 확인 대기에 넣었어요.`
+      + (Number(res.skippedExisting) ? ` 이미 기록된 ${res.skippedExisting}건은 뺐어요.` : '')
+      + (Number(res.skippedInvalid) ? ` 읽을 수 없는 ${res.skippedInvalid}건도 뺐어요.` : '')
+      + ' 아래에서 확인해 주세요.');
+    router.refresh(); // 서버가 다시 계산한 확인 대기 목록을 받는다
   }
   async function setReason(id: number, reason: string) {
     if (!await visitApi({ action: 'set_reason', visitId: id, reason })) return;
@@ -233,22 +268,36 @@ export default function MyData(p: Props) {
                     다녀오신 여정이 있는데 아직 기록으로 남기지 않았어요. 확인하면 다음 추천에서 지난 방문으로 써요.
                   </div>
                   {pending.map(t => (
-                    <div key={t.id} className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5">
+                    <div key={`${t.kind}-${t.id}`} className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="flex min-w-0 flex-1 items-center gap-2 text-[15px] font-bold">
-                          <span>{t.chosen_origin ?? '?'}</span><span className="font-normal text-faint">→</span><span>{t.dest_city}</span>
+                          <span>{t.from_airport ?? '?'}</span><span className="font-normal text-faint">→</span><span>{t.dest_city}</span>
                         </div>
-                        <div className="flex-none text-xs text-muted tabular-nums">{dot(t.trip_date)}</div>
+                        <div className="flex-none text-xs text-muted tabular-nums">{dot(t.visited_on)}</div>
                       </div>
-                      <div><span className="rounded-[10px] bg-chip px-2.5 py-0.5 text-xs font-semibold text-ink-2">{t.reason}</span></div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {t.reason && <span className="rounded-[10px] bg-chip px-2.5 py-0.5 text-xs font-semibold text-ink-2">{t.reason}</span>}
+                        <span className="text-[11px] text-faint">{t.kind === 'trip' ? '대화에서' : `파일에서 · ${t.source}`}</span>
+                      </div>
                       <div className="flex gap-2">
-                        <button onClick={() => confirmTrip(t)} className="min-h-10 flex-1 rounded-full bg-accent text-[13px] font-semibold text-white">다녀왔어요</button>
-                        <button onClick={() => dismissTrip(t)} className="min-h-10 flex-1 rounded-full border border-line-strong bg-surface text-[13px] font-semibold text-ink-2">안 갔어요</button>
+                        <button onClick={() => confirmPending(t)} className="min-h-10 flex-1 rounded-full bg-accent text-[13px] font-semibold text-white">다녀왔어요</button>
+                        <button onClick={() => dismissPending(t)} className="min-h-10 flex-1 rounded-full border border-line-strong bg-surface text-[13px] font-semibold text-ink-2">안 갔어요</button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+              <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-4 py-3.5">
+                <div className="text-[13px] font-semibold text-ink-2">구글 타임라인 가져오기</div>
+                <div className="text-xs leading-normal text-muted text-pretty">
+                  휴대폰에서 내보낸 Timeline.json을 올리면 공항에 다녀온 여정을 찾아 확인 대기에 넣어요.
+                  파일은 브라우저 안에서만 읽고, 서버에는 찾아낸 여정만 보내요.
+                </div>
+                <input type="file" accept=".json,application/json"
+                  onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; importTimeline(f); }}
+                  className="text-xs file:mr-2 file:min-h-9 file:rounded-full file:border file:border-line-strong file:bg-surface file:px-3 file:text-[13px] file:font-semibold" />
+                {importMsg && <div className="text-[12px] leading-normal text-ink-2 text-pretty">{importMsg}</div>}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {['전체', '이유 미입력', ...reasons].map(f => (
                   <button key={f} onClick={() => setFilter(f)} className={`min-h-9 rounded-full px-3 text-[13px] font-semibold ${pill(filter === f)}`}>{f}</button>
