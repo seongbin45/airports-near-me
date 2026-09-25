@@ -137,3 +137,19 @@ GitHub Actions: `.github/workflows/sync-flights.yml`. 저장소 Settings → Sec
 | `fetch-errors` | 최근 24시간 `flight_fetch_log` 오류·0건 | 아니오 |
 
 판정 규칙은 `lib/server/data-health.ts`의 순수 함수이고 테스트가 있다. 조회는 `scripts/doctor.mts`가 service role로 한다.
+
+## 집 → 공항 이동 시간 채우기
+
+이 서비스의 핵심 계산인데 지금까지 경로 자체가 막혀 있었다 — `access-time.ts`는 "regions 대표 좌표 기준"이라고 적혀 있었지만 **`regions`에 좌표 컬럼이 없었고**, 어댑터는 빈 배열이었으며, 지오코딩 호출이 코드 어디에도 없었다.
+
+```bash
+npm run geocode-regions          # 1) 행정구역 대표 좌표 채우기 (카카오 로컬 주소 검색)
+npm run access-times             # 2) 지역 × 공항 조합의 이동 시간 계산·저장
+npm run doctor                   # 3) 얼마나 덮였는지 확인
+```
+
+- 1) `supabase/migrations/20260925152000_region_coords.sql`이 `regions.lat/lng/geocoded_at`을 만든다. `scripts/geocode-regions.mts`가 좌표 없는 **유효** 구역만 골라 "경기도 수원시 영통구"처럼 질의한다. 카카오는 `x=경도, y=위도`이므로 파서가 **한국 좌표 범위(위도 32~39.5, 경도 124~132.5)를 검사**해 뒤바뀐 값을 버린다.
+- 2) 수단별 출처: 차량 = 카카오모빌리티 자동차 길찾기(`KAKAO_REST_KEY`, `summary.duration` 초 → 분), 대중교통 = ODsay(`ODSAY_KEY`, `info.totalTime` 분). 키가 있는 수단만 계산한다.
+- **추정값을 만들지 않는다.** 직선거리로 환산한 시간은 그럴듯해 보이지만 추천 결과를 조용히 바꾼다. 파싱이 실패한 조합은 비워 두고 다음 실행에서 다시 시도하며, `npm run doctor`의 `access-times`·`regions-coords` 게이트가 덮인 비율을 보고한다.
+- `planAccessTimes()`(순수 함수·테스트 있음)가 대상을 정한다: 좌표 없는 조합 제외, 최근 `--refresh-days`(기본 30일) 안에 받은 실측은 건너뛰고, 화면용 샘플(`is_sample`)과 빈 조합을 먼저 채운다. `--limit`(기본 200)이 이번 실행의 API 호출 상한이다 — 두 API 모두 일일 한도가 있다.
+- ODsay 응답 본문의 세부 필드는 실제 키로 한 번 받아 확인해야 한다. 파서가 `info.totalTime`을 못 찾으면 **받은 키 이름을 오류 메시지에 넣어** 바로 고칠 수 있게 했다(테스트에 고정).

@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "sync": "tsx --env-file-if-exists=.env.local scripts/sync.mts",
-    "doctor": "tsx --env-file-if-exists=.env.local scripts/doctor.mts"
+    "doctor": "tsx --env-file-if-exists=.env.local scripts/doctor.mts",
+    "geocode-regions": "tsx --env-file-if-exists=.env.local scripts/geocode-regions.mts",
+    "access-times": "tsx --env-file-if-exists=.env.local scripts/build-access-times.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
