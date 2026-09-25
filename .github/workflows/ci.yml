@@ -1,0 +1,27 @@
+# 린트·타입·테스트를 푸시마다 강제한다. (기존 sync-flights.yml은 데이터 동기화만 한다)
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # next build가 타입 검사까지 한다. (bare tsc --noEmit은 next가 생성하는 전역 타입
+      # LayoutProps/PageProps가 없어 새 클론에서 실패한다)
+      - run: npm run build
