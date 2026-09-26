@@ -260,11 +260,30 @@ export interface TransitRoute { minutes: number; payment: number | null; transfe
  * 오류는 { error: { code, message } } 로 온다 (예: -8 필수값 형식 오류, -9 필수값 누락, 500 서버 오류).
  * 응답 본문의 세부 필드는 실제 키를 받아 확인해야 하므로, 못 찾으면 받은 키를 오류 메시지에 넣는다.
  */
+/**
+ * ODsay 오류 본문을 읽는다. **error가 객체로도 배열로도 온다.**
+ * 배열 형태(실제 인증 실패 응답)를 못 읽으면 아래 result 검사로 흘러가
+ * "result가 없어요"라는 형식 오류가 되어, 정작 원인인 인증 실패가 사라진다.
+ * 형식은 개발자포럼의 실제 응답에서 확인했다: {"error":[{"code":"500","message":"[ApiKeyAuthFailed] …"}]}
+ */
+function odsayError(body: unknown): { code: string; message: string } | null {
+  const raw = obj(body)?.['error'];
+  const first = Array.isArray(raw) ? obj(raw[0]) : obj(raw);
+  if (!first) return null;
+  return { code: String(first.code ?? 'ERROR'), message: String(first.message ?? '').trim() };
+}
+
 export function parseOdsayPath(body: unknown): TransitRoute {
-  const err = obj(obj(body)?.error);
+  const err = odsayError(body);
   if (err) {
-    const code = String(err.code ?? 'ERROR');
-    throw new AccessTimeError(`ODsay 오류(${code}): ${String(err.message ?? '')}`.trim(), code, code === '500');
+    // 서버 키 인증 실패는 재시도로 풀리지 않는다(등록된 IP·키 문제). 그 실행 동안 이 제공자를 뺀다.
+    const authFailed = /ApiKeyAuthFailed|authentication failed/i.test(err.message);
+    throw new AccessTimeError(
+      `ODsay 오류(${err.code}): ${err.message}`.trim(),
+      authFailed ? 'KEY' : err.code,
+      err.code === '500',
+      authFailed ? 'exhaust' : undefined,
+    );
   }
   const root = obj(obj(body)?.result);
   if (!root) throw new AccessTimeError('ODsay 응답에 result가 없어요.', 'FORMAT', false);

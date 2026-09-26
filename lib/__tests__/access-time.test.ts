@@ -50,6 +50,29 @@ describe('parseOdsayPath', () => {
   it('경로가 없으면(result.path 없음) 형식 오류', () => {
     expect(() => parseOdsayPath({ result: {} })).toThrow('path 없음');
   });
+  it('배열로 오는 오류도 읽는다 — 인증 실패가 "result가 없어요"로 뭉개지지 않게', () => {
+    // 실제 응답 형식: {"error":[{"code":"500","message":"[ApiKeyAuthFailed] ApiKey authentication failed."}]}
+    // (lab.odsay.com 개발자포럼 seq=596·657 에서 확인)
+    const body = { error: [{ code: '500', message: '[ApiKeyAuthFailed] ApiKey authentication failed.' }] };
+    try {
+      parseOdsayPath(body);
+      expect.unreachable();
+    } catch (e) {
+      // 원인을 사용자에게 그대로 보여준다 — 예전에는 "result가 없어요"만 나와 IP 문제를 알 수 없었다
+      expect((e as Error).message).toContain('ApiKeyAuthFailed');
+      expect((e as AccessTimeError).code).toBe('KEY');
+      expect((e as AccessTimeError).kind).toBe('exhaust'); // 그 실행 동안 제공자를 뺀다
+    }
+  });
+  it('배열 오류라도 인증 문제가 아니면 코드를 그대로 남긴다', () => {
+    try {
+      parseOdsayPath({ error: [{ code: '-8', message: '필수 입력값 형식 및 범위 오류' }] });
+      expect.unreachable();
+    } catch (e) {
+      expect((e as AccessTimeError).code).toBe('-8');
+      expect((e as AccessTimeError).kind).toBe('nodata');
+    }
+  });
 });
 
 describe('buildAccessTimeSources', () => {
