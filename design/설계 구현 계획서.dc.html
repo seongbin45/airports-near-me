@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="./doc-page.js"></script>
+<style>
+html,body{margin:0;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+doc-page:not(:defined){visibility:hidden}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+</style>
+</helmet>
+<doc-page size="a4" margin="18mm">
+  <div slot="footer" style="display:flex;justify-content:space-between;font-size:9pt;color:#9a9087;padding-top:6px;border-top:1px solid #ece3d8">
+    <div>공항 선택 여행 플래너 · 설계 구현 계획서</div>
+    <div>v1 · 2026-09-27</div>
+  </div>
+
+  <h1 style="font-size:24pt;line-height:1.25;margin:0 0 6px;font-weight:800;letter-spacing:-.01em">공항 선택 여행 플래너 설계 구현 계획서</h1>
+  <div style="font-size:10.5pt;color:#7a7067;margin-bottom:22px">대상: 개발자 · 기준 저장소 seongbin45/airports-near-me (main) · 기준일 2026-09-27 · 디자인 원본: 공항 찾기 시작하기 / 공항 찾기 대화 / 내 데이터 (.dc.html)</div>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">1. 서비스 요약</h2>
+  <p style="font-size:11pt;line-height:1.65;margin:0 0 10px">한국 사용자가 거주지·수업 시간표·일정·지난 방문 기록을 입력하면, 목적지와 출발 가능 시각에 맞춰 <b>어느 공항에서 어느 편을 타는 게 가장 빠른지</b>를 총 소요시간 순으로 보여준다. 입력은 대화형 화면으로 받고, 모든 사실 정보(편명·시각·공항·소요시간)는 DB에서만 가져온다. 1차 범위는 대한민국 국내선이며, 다른 국가는 MVP 안정화 뒤 관리자(최성빈) 승인을 거쳐 연다.</p>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">2. 설계 원칙</h2>
+  <ul style="font-size:11pt;line-height:1.65;margin:0 0 10px;padding-left:20px">
+    <li><b>DB가 사실, AI는 문장:</b> AI는 DB 결과를 문장으로 다듬기만 한다. 답에 나온 편명·시각·장소·소요시간·날짜를 코드(<code>lib/ai/verify.ts</code>)로 DB 값과 대조하고, 하나라도 다르거나 검증 중 예외가 나면 표로 대체한다(fail-closed).</li>
+    <li><b>AI는 요청할 때만:</b> 사용자가 버튼을 눌렀을 때만 서버 라우트(<code>/api/ai</code>)에서 호출하고, 도구는 주지 않는다. 호출마다 <code>ai_calls</code>에 제공자·요청/서빙 모델·대조 내역을 남긴다.</li>
+    <li><b>공식 데이터만:</b> 운항은 한국공항공사·국토교통부 TAGO(공공데이터포털), 이동 시간은 카카오모빌리티(차량)·ODsay(대중교통). 봇 감지를 우회하는 브라우저 조회는 쓰지 않는다. 재시도·대기는 공식 API 호출 한도를 지키는 용도로만 둔다.</li>
+    <li><b>추정하지 않기:</b> 값이 없으면 "아직 없어요"로 안내하고, 샘플 값은 화면에 "화면용 샘플 데이터"로 표시한다. 기록은 사용자가 확인(다녀왔어요)해야 방문 기록이 된다.</li>
+    <li><b>모바일 우선 PWA:</b> 레이아웃은 논리 해상도(pt/dp) 기준, Safe Area 반영, 고정 비율을 가정하지 않는다. 기준 폭 393pt(휴대폰)·1440px(PC), 980px 이상에서 대화 화면 오른쪽 정보 패널 고정.</li>
+  </ul>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">3. 현재 구조</h2>
+  <h3 style="font-size:12pt;margin:16px 0 6px;font-weight:700">3.1 기술 스택</h3>
+  <p style="font-size:11pt;line-height:1.65;margin:0 0 10px">Next.js 16(App Router, <code>proxy.ts</code>가 기존 middleware 역할) · Supabase(서울 리전, 인증·Postgres·RLS로 사용자별 분리) · Tailwind · Claude API(<code>claude-opus-5</code>, 서버 측 대체 모델 <code>fallbacks: "default"</code>) · Playwright E2E · 단위 테스트(<code>lib/__tests__</code>).</p>
+
+  <h3 style="font-size:12pt;margin:16px 0 6px;font-weight:700">3.2 화면과 라우트</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt;line-height:1.5;margin:6px 0 12px">
+    <thead><tr style="background:#f3ece3">
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2;width:22%">화면</th>
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2;width:30%">코드</th>
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2">역할</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">로그인 /login</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><code>app/login/*</code>, <code>app/auth/callback</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">이메일 링크 로그인. 개발 모드에서만 비밀번호 칸.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">가입 6단계 /onboarding</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><code>components/onboarding/*</code>, <code>lib/onboarding/*</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">국가 → 거주지 → 유형 → 시간표·일정 → 방문 기록·위치 동의 → 요약. 단계마다 저장(<code>onboarding_step</code>), <code>?step=</code>로 특정 단계 수정.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">대화 /chat</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><code>components/chat/*</code>, <code>/api/day</code>, <code>/api/recommend</code>, <code>/api/ai</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">목적지 → 날짜 → 출발 가능 시각(그날 마지막 일정 종료) → 방문 이유(지난 기록 대조) → 공항별 결과 카드.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">내 데이터 /me</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><code>components/me/MyData.tsx</code>, <code>/api/visits</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">기본 정보 · 방문 기록(확인 대기, 타임라인 가져오기) · AI 기록 · 개인정보(동의, JSON 내보내기, 계정 삭제).</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">운항 동기화</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><code>/api/cron/sync-flights</code>, <code>lib/data/kac-schedule.ts</code>, <code>tago-flights.ts</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">한국공항공사 정기 스케줄 + TAGO 날짜별 운항편·일반석 요금 적재, <code>sync_log</code> 기록.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:12pt;margin:16px 0 6px;font-weight:700">3.3 주요 테이블</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt;line-height:1.5;margin:6px 0 12px">
+    <thead><tr style="background:#f3ece3">
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2;width:26%">테이블</th>
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2">내용</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>countries</code>, <code>regions</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">국가(KR만 enabled). 행정구역 16개 시·도, 현재 256개 구역. 개편 전 이름은 <code>valid_to</code>를 채워 보존.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>airports</code>, <code>flight_schedules</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">공항·터미널 좌표. 운항편(출처, 동기화 시각, <code>economy_fare</code>). 샘플 편은 삭제됨.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>access_times</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">구역 → 공항 이동 시간. <code>mode</code>(차량/대중교통) × <code>depart_band</code>(any, weekday_am/day/pm, weekend). 차량 3,544조합 실측, 대중교통 비어 있음.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>profiles</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">국가, 구역, 상세 주소·좌표, 유형, <code>ai_enabled</code>, 가입 진행 단계.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>class_timetable</code>, <code>schedules</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">수업(요일 배열, 시작·종료) · 일정(종류, 날짜, 하루 종일, 설명 필수, 출처).</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>trips</code>, <code>visits</code>, <code>visit_candidates</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">대화 검색 기록 · 확정된 방문 기록(같은 날 같은 목적지 1건) · 파일에서 온 확인 대기 후보.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8"><code>ai_calls</code>, <code>location_consents</code></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">AI 호출(provider, model, served_model, usage, verify_detail) · 위치정보 동의(문구 버전, 철회 시각).</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">4. 최근 수정사항</h2>
+  <h3 style="font-size:12pt;margin:16px 0 6px;font-weight:700">4.1 코드에 반영됨</h3>
+  <ul style="font-size:11pt;line-height:1.65;margin:0 0 10px;padding-left:20px">
+    <li>행정구역 2026-09 기준: 전남광주통합특별시(2026-07-01), 인천 구 개편(제물포·영종·서해·검단구), 화성시 4개 구, 대구 군위군. 시·도 수는 코드가 직접 센다(16개).</li>
+    <li>운항: 샘플 편 삭제, TAGO 요금 추가, 선택한 편을 <code>trips</code>에 따로 복사해 동기화로 편이 지워져도 기록 유지. 결과 카드에 출처·확인 날짜, 7일 이상 지난 스케줄은 경고.</li>
+    <li>이동 시간: 시각대(<code>depart_band</code>) 도입. 맞는 시각대가 없으면 <code>any</code> 값을 쓰고 "조회 시점의 실시간 교통" 안내를 표시. 대중교통 샘플 삭제, 값이 없으면 안내 문구.</li>
+    <li>방문 기록: 지난 여정은 자동 승격하지 않고 확인 대기로 보여준 뒤 [다녀왔어요]만 기록. [안 갔어요]는 <code>visit_dismissed_at</code>으로 기억. 타임라인 파일은 브라우저에서만 읽고 추정 여정만 전송(50MB 상한).</li>
+    <li>AI: 제공자·모델 기록, 서버 측 대체 모델 표시, 거절·형식 오류·제공자 무응답 구분, 금액·날씨·지연·연락처는 값과 무관하게 차단.</li>
+    <li>개인정보: 위치 동의 철회 시 방문 기록 즉시 삭제(1초 안의 연속 탭은 무시), JSON 내보내기(1,000행 상한을 넘도록 나눠 조회), <code>delete_my_account</code> RPC.</li>
+  </ul>
+  <h3 style="font-size:12pt;margin:16px 0 6px;font-weight:700">4.2 디자인에만 있음 (구현 필요)</h3>
+  <ul style="font-size:11pt;line-height:1.65;margin:0 0 10px;padding-left:20px">
+    <li><b>에브리타임 시간표 불러오기</b> (가입 4단계, 수업 시간표 탭): 공유 링크 안내 4단계 → 링크 입력·붙여넣기 → 과목 미리보기(중복은 해제, 겹침 경고, 시간 없는 온라인 강의는 선택 불가) → 선택 과목 추가. 비공개 시간표 오류 안내. 6장 참고.</li>
+    <li><b>캘린더 연결</b> (가입 4단계, 내 데이터): 화면에는 "준비 중". 구글 캘린더 읽기 전용 또는 .ics 가져오기.</li>
+  </ul>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">5. 앞으로의 방향 (단계별)</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt;line-height:1.5;margin:6px 0 12px">
+    <thead><tr style="background:#f3ece3">
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2;width:14%">단계</th>
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2;width:46%">작업</th>
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2">완료 기준</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><b>P1 데이터 채우기</b></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">시각대별 차량 이동 시간 재계산(카카오 미래 운행 길찾기, 4개 band). ODsay 키로 대중교통 실측. 상세 주소 지오코딩 → 좌표 기준 계산. 행정구역을 행정안전부 행정표준코드(<code>adm_code</code>)로 교체.</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">추천 결과에서 <code>any</code> fallback 비율 5% 미만, 대중교통 결과 표시, <code>npm run doctor</code> 출처 분포 확인.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><b>P2 입력 편의</b></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">에브리타임 불러오기(6장). .ics 가져오기 → 구글 캘린더 OAuth(읽기 전용). 가져온 일정은 <code>source</code>로 구분.</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">디자인과 같은 흐름, 파서 단위 테스트, 실패 시 안내 문구, E2E 추가.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><b>P3 운영 준비</b></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">SMTP 연결(인증 메일 한도), <code>ANTHROPIC_API_KEY</code> 설정, 운항 동기화 cron 주기·실패 알림, 동계 스케줄 공개(10/24 이후) 대응, 유출 비밀번호 차단 설정.</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">실제 사용자 가입·로그인, AI 요약 검증 통과율 기록, 동기화 실패 시 알림 수신.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><b>P4 법무·출시</b></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">위치기반서비스사업 신고 여부 확인(방송통신위원회), 위치정보 이용약관·개인정보 처리방침, 에브리타임 이용약관 검토.</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">검토 결과 문서화, 동의 문구 버전(<code>CONSENT_VERSION</code>) 확정.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top"><b>P5 확장</b></td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">국제선(인천·김포 국제선 스케줄), 다른 국가 오픈은 관리자 승인 화면과 함께. 출발 전 알림.</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8;vertical-align:top">관리자 승인 기록이 남는 국가 활성화 흐름.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">6. 에브리타임 불러오기 구현 설계</h2>
+  <p style="font-size:11pt;line-height:1.65;margin:0 0 10px">에브리타임은 공식 API가 없다. 사용자가 시간표를 "전체 공개"로 두고 공유 URL(<code>everytime.kr/@…</code>)을 복사하면 로그인 없이 볼 수 있는 웹 페이지가 나온다. 이 페이지를 사용자가 준 링크에 한해 서버에서 한 번 읽는다. 우회 기법(사람 흉내, 차단 회피)은 쓰지 않는다. 출시 전 이용약관을 확인하고, 허용되지 않으면 시간표 캡처 이미지 인식으로 대체한다.</p>
+  <ol style="font-size:11pt;line-height:1.65;margin:0 0 10px;padding-left:20px">
+    <li><b>라우트:</b> <code>POST /api/import/everytime</code> { url }. 로그인 필수, 사용자당 분당 3회 제한, 요청 타임아웃 10초.</li>
+    <li><b>검증:</b> 정규식 <code>^(https?://)?(www\.)?everytime\.kr/@[A-Za-z0-9]{8,}/?$</code>. 다른 호스트로의 리다이렉트는 따라가지 않는다(SSRF 방지).</li>
+    <li><b>파싱:</b> 시간표 표는 9:00이 top 450px, 1시간 50px. 요일 열 폭으로 요일 수를 판단(월–금 94px, 월–토 79px, 월–일 67px). 블록마다 top·height로 시작·종료를 계산하고 5분 단위로 반올림한다(우리 시간표는 5분 단위라 30분 반올림 불필요). 과목명·강의실은 블록 안 텍스트. 이 수치는 외부 기사 기준이므로 실제 페이지로 확인하고 <code>docs/UNVERIFIED_VALUES.md</code>에 기록한다.</li>
+    <li><b>응답:</b> { semester, items: [{ name, place, days, start, end, online }] }. 저장하지 않고 미리보기만 반환한다.</li>
+    <li><b>저장:</b> 사용자가 고른 과목만 <code>class_timetable</code>에 <code>source='everytime'</code>으로 넣는다. 링크와 원본 HTML은 저장하지 않는다. 중복 판정은 과목명+요일+시작 시각.</li>
+    <li><b>실패 처리:</b> 비공개(표 없음), 형식 불일치(파싱 0건), 네트워크 오류를 구분해 디자인의 안내 문구로 보여준다. 파서 결과가 0건이면 로그를 남겨 구조 변경을 감지한다.</li>
+    <li><b>테스트:</b> 저장한 샘플 HTML(월–금, 월–토, 5분 단위 시작, 온라인 강의 포함)로 파서 단위 테스트. E2E는 라우트를 목(mock)으로 대체.</li>
+  </ol>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">7. 확인되지 않은 값과 위험</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:10pt;line-height:1.5;margin:6px 0 12px">
+    <thead><tr style="background:#f3ece3">
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2;width:34%">항목</th>
+      <th style="text-align:left;padding:7px 9px;border-bottom:1px solid #d8cec2">현재 상태와 대응</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">국내선 "출발 40분 전 도착"</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">일반 안내 기준. 항공사별 탑승 마감·보안검색 대기 반영 여부 결정 필요.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">카카오 소요시간 시간대 편향</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">2026-09-25 금요일 16–17시 배치라 퇴근길 정체 포함. P1에서 시각대별 재계산.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">TAGO 요금 0, 중복 편</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">0은 "요금 없음" 처리, 5분 차이 중복은 이른 편 유지. 운영팀 문의 예정.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">운항 스케줄 공개 범위</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">두 API 모두 2026-10-24까지. 이후 날짜는 "스케줄 미공개" 안내.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">에브리타임 페이지 구조</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">예고 없이 바뀔 수 있음. 파서 테스트와 0건 감지 로그로 대응, 이용약관 검토 필수.</td></tr>
+      <tr><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">위치정보법</td><td style="padding:7px 9px;border-bottom:1px solid #ece3d8">방문 기록 기반 추천은 위치기반서비스사업 신고 대상일 수 있음. 출시 전 확인.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="font-size:15pt;margin:26px 0 8px;font-weight:700">8. 디자인–코드 동기화 방식</h2>
+  <ul style="font-size:11pt;line-height:1.65;margin:0 0 10px;padding-left:20px">
+    <li>디자인 원본은 이 프로젝트의 .dc.html 3개이며, 저장소 <code>design/</code>에 복사해 둔다. 화면 문구·상태는 디자인을 기준으로 하고, 코드에서 바꾼 경우(예: 30일 뒤 삭제 → 즉시 삭제) 디자인을 다시 맞춘다.</li>
+    <li><code>github.md</code>의 화면–파일 표를 기준으로 동기화한다. 푸시 후 커밋 ID를 기록하면 다음 동기화에서 바뀐 파일만 비교할 수 있다.</li>
+    <li>샘플 값을 쓰는 화면은 반드시 "화면용 샘플 데이터" 태그를 붙이고, 실제 값으로 바뀌면 태그가 자동으로 사라지게 <code>is_sample</code>로 판단한다.</li>
+  </ul>
+</doc-page>
+</x-dc>
+</body>
+</html>
