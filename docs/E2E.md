@@ -54,6 +54,19 @@ e2e         로그인 → 가입 6단계 → 대화 → 추천 → /me
 - **`.e2e-date`**는 기계마다 다르므로 커밋하지 않는다(`.gitignore`).
 - 로컬 실행: `npm run dev` 대신 `npm run build && npm run start`를 쓴다(빌드 시점 인라인 때문).
 
+## 검사에 필요한 데이터
+
+| 무엇 | 어떻게 | 없으면 |
+|---|---|---|
+| 운항 스케줄 | `e2e-data.yml`의 `sync -- kac-full`·`tago-horizon` | 추천 카드가 0건 |
+| 거주지 → 공항 접근 시간 | `e2e-data.yml`의 `e2e:seed` (고정값 `source = E2E 고정값`) | `regionMissing` → "걸리는 시간이 아직 DB에 없어 계산할 수 없어요" |
+| 계정·방문 기록 | `e2e-reset.mts` | '지난 제주 방문 3회' 단언 실패 |
+| 지역 좌표 | 필요 없음 (고정값을 직접 넣으므로 좌표를 안 쓴다) | `doctor`의 `regions-coords`가 주의로 뜰 뿐이다 |
+
+접근 시간을 카카오 배치로 채우지 않는 이유: 키를 CI에 두면 쿼터가 운영 동기화·앱 런타임과 섞이고,
+검사는 "추천이 뜨는가"를 보는 것이지 "카카오 값이 맞는가"를 보는 것이 아니다.
+값은 `source = E2E 고정값`으로 **투명하게 표시**한다(`is_sample`은 켜지 않는다 — 화면에 샘플 배지가 붙으면 E2E의 "샘플 아님" 단언과 어긋난다).
+
 ## 시크릿이 없을 때 (테스트 프로젝트를 만들기 전)
 
 `E2E_SUPABASE_URL`·`E2E_SUPABASE_SERVICE_ROLE_KEY`·`DEV_TEST_PASSWORD` 중 하나라도 비어 있으면

@@ -108,6 +108,15 @@ select count(*) from auth.users where email = 'dev@airports-near-me.test';   -- 
 select count(*) from public.e2e_marker;                                      -- 테이블 없음(오류)이 정상
 ```
 
+## 이 워크플로가 하는 일
+
+`e2e:reset`(표식 확인) → `sync kac-full` → `sync tago-horizon` → `e2e:seed` → `doctor`.
+
+`e2e:seed`가 **거주지→공항 접근 시간 고정값**(`source = E2E 고정값`)을 넣는다 — 없으면 추천이 계산되지 않아
+대화 흐름이 `regionMissing`에서 멈춘다. 카카오 키를 CI에 두지 않기 위한 선택이다(근거는 `docs/E2E.md`).
+지역 좌표(`geocode-regions`)는 이 검사에 필요 없다.
+
+
 ## 8. 끝난 뒤 확인 목록
 
 - [ ] `cat supabase/.temp/project-ref` = 운영
