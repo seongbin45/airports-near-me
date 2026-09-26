@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -10,6 +10,7 @@ import { fmtDur, hhmm, toMin } from '@/lib/time';
 import type { AccessRow, AiCallRow } from '@/app/me/page';
 import { PROVIDER_LABEL, type ProviderId } from '@/lib/ai/providers-meta';
 import type { PendingVisit } from '@/lib/visits';
+import { isDeliberateConfirm } from '@/lib/confirm';
 import { inferTimelineTrips, parseAirportVisits, type AirportPoint } from '@/lib/data/timeline-import';
 
 interface Visit { id: number; trip_id: number | null; dest_city: string; visited_on: string; reason: string | null; from_airport: string | null; source: string; is_sample: boolean }
@@ -69,6 +70,8 @@ export default function MyData(p: Props) {
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [ai, setAi] = useState(p.aiEnabled);
   const [confirmDel, setConfirmDel] = useState(false);
+  // 확인 상태가 된 시각 — 너무 빠른 두 번째 탭을 거르는 데 쓴다 (lib/confirm.ts)
+  const armedAt = useRef<{ revoke: number | null; del: number | null }>({ revoke: null, del: null });
   const [err, setErr] = useState('');
   const [importMsg, setImportMsg] = useState('');
 
@@ -158,8 +161,13 @@ export default function MyData(p: Props) {
       setConsent(true);
       return;
     }
-    // 스위치를 한 번 더 누르면 확정 (디자인과 동일), 아래 버튼으로도 확정 가능
-    if (confirmRevoke) return revoke();
+    // 스위치를 한 번 더 누르면 확정 (디자인과 동일), 아래 버튼으로도 확정 가능.
+    // 1초 안에 들어온 두 번째 탭(연속 탭)은 무시한다 — 경고를 읽기 전에 방문 기록이 전부 지워지지 않게.
+    if (confirmRevoke) {
+      if (isDeliberateConfirm(armedAt.current.revoke, Date.now())) return revoke();
+      return;
+    }
+    armedAt.current.revoke = Date.now();
     setConfirmRevoke(true);
   }
   async function revoke() {
@@ -185,7 +193,9 @@ export default function MyData(p: Props) {
     URL.revokeObjectURL(url);
   }
   async function deleteAccount() {
-    if (!confirmDel) return setConfirmDel(true);
+    if (!confirmDel) { armedAt.current.del = Date.now(); return setConfirmDel(true); }
+    // 연속 탭으로 확인 문구를 보기도 전에 계정이 지워지지 않게
+    if (!isDeliberateConfirm(armedAt.current.del, Date.now())) return;
     if (fail((await supabase.rpc('delete_my_account')).error)) return;
     await supabase.auth.signOut();
     router.replace('/login');

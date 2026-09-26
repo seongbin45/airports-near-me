@@ -366,3 +366,18 @@ describe('dataHealth — 데이터 상태 게이트', () => {
     expect(r.gates.find(g => g.id === 'regions-coords')!.headline).toBe('행정구역 좌표 3/250');
   });
 });
+
+import { CONFIRM_MIN_MS, isDeliberateConfirm } from '../confirm';
+
+describe('되돌릴 수 없는 동작의 확인 — 연속 탭 거르기', () => {
+  it('확인 상태가 아니면 확정하지 않는다', () => {
+    expect(isDeliberateConfirm(null, 10_000)).toBe(false);
+  });
+  it('확인 상태가 된 뒤 1초 안의 두 번째 탭(모바일 연속 탭)은 무시', () => {
+    expect(isDeliberateConfirm(10_000, 10_000 + 150)).toBe(false);
+    expect(isDeliberateConfirm(10_000, 10_000 + CONFIRM_MIN_MS - 1)).toBe(false);
+  });
+  it('1초 이상 지나 다시 누르면 확정', () => {
+    expect(isDeliberateConfirm(10_000, 10_000 + CONFIRM_MIN_MS)).toBe(true);
+  });
+});
