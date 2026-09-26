@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Badge, SampleTag } from '@/components/ui';
 import { DOMESTIC_BUFFER_MIN, MODE_LABEL, STALE_DAYS, type Mode, type Recommendation, type RecommendRow } from '@/lib/recommend';
 import { bandTitle } from '@/lib/data/access-bands';
@@ -20,7 +21,8 @@ export interface Msg {
 
 interface Props {
   msgs: Msg[];
-  result: (Recommendation & { regionMissing: boolean }) | null;
+  // tripId는 추천이 DB에 기록된 뒤에만 있다(이동수단만 바꿔 다시 볼 때는 null).
+  result: (Recommendation & { regionMissing: boolean; tripId?: number | null }) | null;
   dest?: string;
   departure?: string;
   mode: Mode;
@@ -137,6 +139,11 @@ function Results({ result, dest, departure, mode }: { result: NonNullable<Props[
           </div>
         </div>
       ))}
+      {result.tripId != null && result.rows.length > 0 && (
+        <div className="px-1 text-xs leading-normal text-muted text-pretty">
+          다녀온 뒤에는 <Link href="/me" className="font-semibold text-accent underline underline-offset-2">내 데이터</Link>에서 이 여정을 확인하고 방문 기록으로 남길 수 있어요.
+        </div>
+      )}
       {result.rows.some(r => !r.accessBandMatched) && (
         <div className="px-1 text-xs leading-normal text-warn text-pretty">
           출발 시각대에 맞는 이동 시간이 아직 없어, 호출 시점의 실시간 교통으로 계산한 값을 썼어요
