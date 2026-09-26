@@ -86,6 +86,10 @@ PR마다 빨간 X가 쌓이지 않게 하려는 것이다. 건너뛸 때는 `::w
 | 서버가 안 뜸 | `server.log` 아티팩트를 본다. 대개 env 누락(`NEXT_PUBLIC_*`를 빌드 전에 못 넣은 경우) |
 | 로그인 실패 | `DEV_TEST_PASSWORD`와 계정 상태. `e2e:reset`이 계정을 새로 만들므로 비밀번호는 Secret 값 그대로여야 한다 |
 
+## 프로젝트 준비
+
+프로젝트 생성·마이그레이션·표식·Secrets·운영 정리 절차는 **`docs/E2E_SETUP.md`** 에 있다.
+
 ## 관련 결정
 
 - 채널을 지정하지 않으면 playwright가 받은 **번들 Chromium**을 쓴다. 러너에 msedge는 없다.
