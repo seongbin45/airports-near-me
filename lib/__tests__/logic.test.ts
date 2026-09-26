@@ -349,6 +349,22 @@ describe('dataHealth — 데이터 상태 게이트', () => {
     expect(g.ok).toBe(false);
     expect(g.detail).toContain('publishable');
   });
+  it('중단된 실행은 뒤에 같은 작업이 성공했으면 세지 않고, 새 중단은 잡는다', () => {
+    const at = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+    const dead = { job: 'tago-horizon', ok: null, startedAt: at(22), finishedAt: null, aborted: null, failed: 0, note: null };
+    const okLater = { job: 'tago-horizon', ok: true, startedAt: at(1), finishedAt: at(0.9), aborted: null, failed: 0, note: null };
+    // 09-25 사례: 중단 뒤 복구 실행이 성공 → 대체된 이력
+    expect(gate({ ...base, runs: [okLater, dead] }, 'sync-pending').ok).toBe(true);
+    // 다른 작업의 성공은 대체하지 않는다
+    const kacOk = { ...okLater, job: 'kac-full' };
+    expect(gate({ ...base, runs: [kacOk, dead] }, 'sync-pending').ok).toBe(false);
+    // 성공 뒤에 새로 중단 → 잡는다 (형식이 +00:00이어도)
+    const okEarlier = { ...okLater, startedAt: at(30), finishedAt: at(29) };
+    const newDead = { ...dead, startedAt: at(5).replace('Z', '+00:00') };
+    const g = gate({ ...base, runs: [newDead, okEarlier] }, 'sync-pending');
+    expect(g.ok).toBe(false);
+    expect(g.headline).toContain('1건');
+  });
   it('접근 시간이 없으면 치명 실패 (핵심 계산)', () => {
     const r = dataHealth({ ...base, access: { rows: 0, regions: 0, airports: 0, sample: 0, byBand: {} } });
     expect(r.gates.find(g => g.id === 'access-times')!.ok).toBe(false);

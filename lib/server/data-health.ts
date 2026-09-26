@@ -94,7 +94,16 @@ export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } 
   const lastOkAge = lastOk ? hoursSince(lastOk.finishedAt ?? lastOk.startedAt) : Infinity;
   // 끝나지 않은 실행 — cancelled·timeout으로 죽으면 finished_at이 null로 남고, sync-recent는 ok===true만 세므로
   // "성공"으로 오인되진 않지만 "중단됐다"고 알려주지도 않는다. 그 조용함을 여기서 깬다.
-  const stuck = i.runs.filter(r => !r.finishedAt && hoursSince(r.startedAt) > SYNC_PENDING_HOURS);
+  // 같은 작업이 그 뒤에 성공했으면 그 중단은 이미 대체된 이력이라 세지 않는다 — 안 그러면 죽은 행(finished_at이
+  // 영원히 null)이 게이트를 영구히 노란불로 만든다. 행을 손으로 닫지 않고(사실 조작) 판정만 이렇게 한다.
+  // 시각은 문자열이 아니라 Date.parse로 비교한다 (Z / +00:00 형식이 섞여도 맞게).
+  const lastOkAt = new Map<string, number>();
+  for (const r of i.runs) {
+    const t = Date.parse(r.startedAt);
+    if (r.ok === true && !Number.isNaN(t) && t > (lastOkAt.get(r.job) ?? -Infinity)) lastOkAt.set(r.job, t);
+  }
+  const stuck = i.runs.filter(r => !r.finishedAt && hoursSince(r.startedAt) > SYNC_PENDING_HOURS
+    && !(Date.parse(r.startedAt) < (lastOkAt.get(r.job) ?? -Infinity)));
 
   const realAccess = i.access.rows - i.access.sample;
   const bandedAccess = Object.entries(i.access.byBand).filter(([b]) => b !== 'any').reduce((n, [, c]) => n + c, 0);
@@ -125,7 +134,7 @@ export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } 
       ok: stuck.length === 0,
       headline: stuck.length === 0 ? '끝나지 않은 동기화 실행 없음' : `끝나지 않은 동기화 실행 ${stuck.length}건`,
       detail: stuck.length === 0
-        ? `최근 실행 ${i.runs.length}건이 모두 끝났어요.`
+        ? `최근 실행 ${i.runs.length}건 중 중단된 채 남은 실행이 없어요 (뒤에 같은 작업이 성공한 중단은 제외).`
         : stuck.map(r => `${r.job} (${r.startedAt} 시작, ${Math.floor(hoursSince(r.startedAt))}시간째)`).join(' · ')
           + ' — 워크플로 timeout이나 러너 중단으로 끝난 실행이에요. 성공으로 세지 않으므로 데이터는 그대로 낡고, 그 사실은 sync-recent가 알려줍니다. 워크플로 로그에서 cancelled 여부를 보세요.',
       critical: false,
