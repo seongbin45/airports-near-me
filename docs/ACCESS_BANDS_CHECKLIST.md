@@ -24,11 +24,26 @@
 - [ ] **키가 있는가** — `.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `KAKAO_REST_KEY`.
       시각대 배치는 **출발 시각을 실제로 반영하는 제공자만** 쓴다(`supportsDepartureTime`). 지금 그 조건을 만족하는 건
       카카오모빌리티 미래 운행 정보 길찾기 하나뿐이라 **`KAKAO_REST_KEY`가 없으면 시각대는 못 채운다.**
+- [ ] **대중교통을 쓸 거면 ODsay 애플리케이션 등록** — `서버` 플랫폼으로 등록하고, **`npm run access-times`를
+      실행하는 기계의 공인 IP**를 넣는다(웹 키는 도메인으로 식별하니 이 용도에 맞지 않는다).
+      서버 키는 IP로 사용자를 식별하므로 **IP가 바뀌면 인증이 실패한다**. `URI/IP`는 5개까지 등록되고
+      반영에 최대 1분 걸린다. 공인 IP는 실행하는 기계에서 확인한다(사설 IP가 아니다):
+      ```powershell
+      (Invoke-RestMethod -Uri "https://api.ipify.org")   # PowerShell에서는 curl이 Invoke-WebRequest 별칭이라 -s가 안 먹는다
+      ```
+      근거: [애플리케이션 등록 가이드](https://lab.odsay.com/guide/guide), [개발자포럼(고정 IP 요구)](https://lab.odsay.com/community/boardView?seq=609)
+- [ ] **`--bands` 값은 반드시 따옴표로 묶는다 (PowerShell)** — 쉼표를 그대로 쓰면 PowerShell이 배열로 쪼개
+      `--bands weekday_am weekday_day …`가 되고, 스크립트는 첫 값만 읽어 **조용히 한 시각대만 계산한다.**
+      ```powershell
+      npm run access-times -- --bands "weekday_am,weekday_day,weekday_pm,weekend"
+      ```
+      값 없는 `--bands`는 기본값 `any`가 된다(2장의 위험한 실수).
 - [ ] **가짜 실행으로 확인** — 아래를 먼저 돌린다. DB에 아무것도 쓰지 않는다.
       ```bash
       npm run access-times -- --bands weekday_am --region 1 --limit 3 --dry
       ```
-      기대 출력에 `시각대: 평일 아침 (08:00) → …Z`, `[dry] …→…공항 …분 (카카오모빌리티 길찾기)`가 있어야 한다.
+      기대 출력에 `시각대: 평일 아침 (08:00) → …Z`, `[dry] …→…공항 …분 (카카오모빌리티 미래 길찾기)`가 있어야 한다.
+      `--dry`는 DB에 쓰지 않지만 **제공자 호출은 실제로 나간다** — 대중교통 조합이 계획에 들어 있으면 ODsay 한도를 쓴다.
 
 ## 1. 배치 전 상태 기록
 
@@ -133,6 +148,8 @@
 | 시작하자마자 `depart_band` 관련 예외/`저장 실패 …column…does not exist` | 마이그레이션 미적용 | 0장의 마이그레이션을 먼저 실행 |
 | `모르는 시각대: weekday_morn` (exit 2) | 이름 오타 | 가능한 값: `any, weekday_am, weekday_day, weekday_pm, weekend` |
 | `계산할 수단이 없어요.` (exit 2) | 차량 소스도 없고 대중교통도 없음 | `OSRM_URL=off`로 꺼 두지 않았는지 확인. 대중교통은 `ODSAY_KEY` 필요 |
+| `ODsay 오류(500): [ApiKeyAuthFailed] ApiKey authentication failed.` | 서버 키 인증 실패 — **등록한 IP와 호출 IP가 다르거나 키 플랫폼이 서버가 아님** | 0장의 공인 IP 확인 절차로 IP를 다시 등록(설정 반영 최대 1분). 이 오류가 나면 그 실행에서 ODsay는 빠진다 |
+| `ODsay 응답에 result가 없어요.` | 오류 본문을 못 읽은 경우(형식 변경) | `ODsay 오류(…)` 형태가 아니면 응답 본문을 확인해 `lib/data/access-time.ts`의 `odsayError`를 맞춘다 |
 | `시각대 weekday_am의 출발 시각을 계산할 수 없어요.` (exit 2) | 출발 시각 산출 실패(시계·요일 처리 이상) | 서버 시각을 확인하고 다시 실행. 재현되면 `lib/data/access-bands.ts`를 본다 |
 | `airports 조회 실패: …` (exit 2) | DB 접속·권한 | `SUPABASE_SERVICE_ROLE_KEY`가 secret 키인지 확인 |
 | `좌표가 있는 지역이 없어요. 먼저 npm run geocode-regions 를 돌리세요.` (exit 1) | `regions.lat/lng`가 비었음 | 지오코딩 배치를 먼저 돌린다 |
@@ -155,6 +172,9 @@
   중단 조건(`exhausted`, `maxFail × concurrency` 연속 실패), 출력 문구, 저장 방식(`onConflict: region_id,airport,mode,depart_band`).
 - `doctor`의 `access-bands` 판정식과 `critical: false`(통과/주의 문구는 합성 입력으로 실제 렌더해 확인했다).
 
-**확인하지 못한 것** (키가 없다):
-- 이 배치를 실제로 돌린 결과(회차 수, 소요 시간, 카카오 한도 소진 여부).
+**확인하지 못한 것** (이 문서를 쓴 환경에서는 키가 없었다):
+- 이 배치를 실제로 끝까지 돌린 결과(회차 수, 소요 시간, 카카오 한도 소진 여부).
 - 카카오가 `departure_time`을 실제로 반영하는지 — 5장이 그걸 확인하는 절차다. **배치 후 반드시 5장을 돌린다.**
+  (2026-09-26 Windows에서 `--bands weekday_am --region 1 --limit 3 --dry`가 `카카오모빌리티 미래 길찾기`로
+  3건을 계산하는 것은 확인됐다. 출발 시각으로 2026-09-28(월) 08:00 KST를 골랐다 — 주말을 건너뛰는 것이 맞다.)
+- ODsay 대중교통은 아직 한 건도 받지 못했다(키 인증 상태 미확인).
