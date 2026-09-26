@@ -99,7 +99,10 @@ async function chatFlow(page, tag) {
 
   await page.getByRole('button', { name: /다가오는 일정/ }).click();
   await page.getByRole('button', { name: '회의' }).click();
-  await page.fill('input[type=date]', '2026-10-02');
+  // 일정 날짜는 검사 날짜와 같아야 한다. 이 회의가 그날의 마지막 일정이 되어 출발 시각 14:30이 나온다.
+  // 예전엔 2026-10-02로 박아 두었는데, 검사 날짜는 e2e:reset이 운항 스케줄 공개 범위를 보고 고른다.
+  // 둘이 어긋나면 그날 마지막 일정은 금요일 수업(11:45)이 되어 아래 14:30 단언이 전부 깨진다.
+  await page.fill('input[type=date]', isoDate);
   const times = page.locator('input[type=time]');
   await times.nth(0).fill('13:00');
   await times.nth(1).fill('14:30');
