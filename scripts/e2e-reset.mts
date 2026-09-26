@@ -26,7 +26,9 @@ const email = need('DEV_TEST_EMAIL');
 const password = need('DEV_TEST_PASSWORD');
 const admin = createClient(url, need('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
 
-const fail = (msg: string) => { console.error(`중단: ${msg}`); process.exit(2); };
+// 타입을 **변수에** 명시한다. 화살표 함수에만 : never를 붙이면 TS가 제어 흐름 분석에서
+// never 반환 호출로 보지 않아, 이 함수 뒤에서 값이 좁혀지지 않는다 (tsc: 'possibly null').
+const fail: (msg: string) => never = (msg) => { console.error(`중단: ${msg}`); process.exit(2); };
 
 // ── 1) 이 DB가 테스트 전용인지 증명한다 (가장 먼저, 그리고 조회 오류도 중단 사유로 본다)
 const marker = await admin.from('e2e_marker').select('note').eq('id', 1).maybeSingle();
@@ -58,8 +60,9 @@ if (existing) {
 }
 
 const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-if (createErr || !created?.user) fail(`계정을 만들지 못했어요: ${createErr?.message ?? 'user 없음'}`);
-const userId = created.user.id;
+const createdUser = created?.user;
+if (createErr || !createdUser) fail(`계정을 만들지 못했어요: ${createErr?.message ?? 'user 없음'}`);
+const userId = createdUser.id;
 console.log(`계정 생성: ${email}`);
 
 // trigger가 profiles 행을 만들지만 반영이 늦을 수 있어 없으면 넣는다
@@ -94,7 +97,7 @@ const addDays = (s: string, n: number) => {
 const { data: lastValid, error: rangeErr } = await admin.from('flight_schedules').select('valid_to')
   .eq('is_sample', false).not('valid_to', 'is', null).order('valid_to', { ascending: false }).limit(1).maybeSingle();
 if (rangeErr) fail(`운항 스케줄 범위를 읽지 못했어요: ${rangeErr.message}`);
-const until = lastValid?.valid_to as string | undefined;
+const until = (lastValid?.valid_to ?? null) as string | null;
 if (!until) fail('실제 운항 스케줄이 없어요. test 프로젝트에 sync를 먼저 채워야 합니다.');
 
 const horizon = Number(process.env.E2E_HORIZON_DAYS ?? 120);
