@@ -32,7 +32,7 @@ begin
       and (
         select array_agg(a.attname order by a.attname)
         from unnest(conkey) as k(attnum) join pg_attribute a on a.attrelid = conrelid and a.attnum = k.attnum
-      ) = array['airport', 'mode', 'region_id']
+      ) = array['airport', 'mode', 'region_id']::name[]
   loop
     execute format('alter table public.access_times drop constraint %I', c.conname);
   end loop;
