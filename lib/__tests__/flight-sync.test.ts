@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { addDaysIso, dedupe, planOnDemand, planTagoDates } from '../server/flight-sync';
+import {
+  addDaysIso, deadlineHit, dedupe, isTransportFailure, nextStreak, planOnDemand, planTagoDates, SYNC_DEADLINE_MS,
+} from '../server/flight-sync';
+import { DataGoKrError } from '../data/data-go-kr';
 import { KAC_SOURCE } from '../data/kac-schedule';
 import { TAGO_SOURCE } from '../data/tago-flights';
 import type { FlightScheduleRecord } from '../data/flight-schedule';
@@ -62,5 +65,43 @@ describe('planOnDemand', () => {
     expect(planOnDemand([route], [{ source: KAC_SOURCE, origin: 'GMP', dest: 'CJU' }],
       [{ source: TAGO_SOURCE, origin: 'GMP', dest: 'CJU', fetched_at: '2026-10-01T03:00:00Z' }], now).map(t => t.source))
       .toEqual([TAGO_SOURCE]);
+  });
+});
+
+// 2026-09-25: 러너에서 공공데이터포털 연결이 막혀 TAGO 1,102회를 22분 동안 두드리다 워크플로 timeout에 걸려
+// cancelled로 끝났다. 취소는 알림 없이 묻히므로 스스로 멈추는 장치를 여기서 고정한다.
+describe('연결 실패 회로 차단기', () => {
+  it('NETWORK와 재시도 가능한 오류를 연결 실패로 센다', () => {
+    expect(isTransportFailure(new DataGoKrError('네트워크 오류: fetch failed', 'NETWORK', false))).toBe(true);
+    expect(isTransportFailure(new DataGoKrError('HTTP 502', '502', true))).toBe(true);
+  });
+  it('형식 오류와 DB 권한 오류는 세지 않는다', () => {
+    expect(isTransportFailure(new DataGoKrError('응답 형식이 예상과 달라요', 'FORMAT', false))).toBe(false);
+    expect(isTransportFailure({ code: '42501', message: 'RLS에 막힘' })).toBe(false);
+  });
+  it('4번까지는 계속하고 5번째에 멈춘다', () => {
+    const e = new DataGoKrError('네트워크 오류: fetch failed', 'NETWORK', false);
+    let streak = 0;
+    for (let i = 1; i <= 4; i++) {
+      const r = nextStreak(streak, e);
+      expect(r.stop, `${i}번째에 멈추면 안 된다`).toBeNull();
+      streak = r.streak;
+    }
+    expect(streak).toBe(4);
+    expect(nextStreak(streak, e).stop).toContain('5번');
+  });
+  it('중간에 다른 종류의 오류가 오면 연속이 끊긴다', () => {
+    expect(nextStreak(4, new DataGoKrError('응답 형식', 'FORMAT', false)).streak).toBe(0);
+  });
+});
+
+describe('내부 데드라인', () => {
+  const t0 = Date.parse('2026-09-27T02:00:00Z');
+  it('44분은 지나가고 46분은 멈춘다', () => {
+    expect(deadlineHit(t0, t0 + 44 * 60_000)).toBe(false);
+    expect(deadlineHit(t0, t0 + 46 * 60_000)).toBe(true);
+  });
+  it('워크플로 timeout(60분)보다 짧아야 한다 — 그래야 job이 cancelled가 아니라 failed로 끝난다', () => {
+    expect(SYNC_DEADLINE_MS).toBeLessThan(60 * 60_000);
   });
 });

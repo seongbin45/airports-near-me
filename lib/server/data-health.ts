@@ -70,8 +70,14 @@ export interface Gate {
   critical: boolean;
 }
 
-/** 마지막 성공 실행이 이 시간 안이어야 정상으로 본다 (매일 03:00 KST 실행 기준) */
+/** 마지막 성공 실행이 이 시간 안이어야 정상으로 본다 (매일 11:00 KST 실행 기준) */
 export const SYNC_OK_HOURS = 30;
+
+/**
+ * 이 시간을 넘도록 끝나지 않은 실행은 중단된 것으로 본다.
+ * 워크플로 timeout(60분)과 스크립트 내부 데드라인(45분)보다 넉넉해야 정상 실행을 오해하지 않는다.
+ */
+export const SYNC_PENDING_HOURS = 2;
 
 const hoursSince = (iso: string | null) => {
   if (!iso) return Infinity;
@@ -86,6 +92,9 @@ export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } 
   const lastOk = i.runs.find(r => r.ok === true) ?? null;
   const lastRun = i.runs[0] ?? null;
   const lastOkAge = lastOk ? hoursSince(lastOk.finishedAt ?? lastOk.startedAt) : Infinity;
+  // 끝나지 않은 실행 — cancelled·timeout으로 죽으면 finished_at이 null로 남고, sync-recent는 ok===true만 세므로
+  // "성공"으로 오인되진 않지만 "중단됐다"고 알려주지도 않는다. 그 조용함을 여기서 깬다.
+  const stuck = i.runs.filter(r => !r.finishedAt && hoursSince(r.startedAt) > SYNC_PENDING_HOURS);
 
   const realAccess = i.access.rows - i.access.sample;
   const bandedAccess = Object.entries(i.access.byBand).filter(([b]) => b !== 'any').reduce((n, [, c]) => n + c, 0);
@@ -110,6 +119,16 @@ export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } 
         ? `마지막 실행은 실패: ${lastRun.aborted ?? `실패 ${lastRun.failed}건`}`
         : i.schedules.lastSyncedAt ? `DB에 기록된 마지막 저장 시각: ${i.schedules.lastSyncedAt}` : 'flight_schedules.synced_at이 비어 있어요',
       critical: true,
+    },
+    {
+      id: 'sync-pending',
+      ok: stuck.length === 0,
+      headline: stuck.length === 0 ? '끝나지 않은 동기화 실행 없음' : `끝나지 않은 동기화 실행 ${stuck.length}건`,
+      detail: stuck.length === 0
+        ? `최근 실행 ${i.runs.length}건이 모두 끝났어요.`
+        : stuck.map(r => `${r.job} (${r.startedAt} 시작, ${Math.floor(hoursSince(r.startedAt))}시간째)`).join(' · ')
+          + ' — 워크플로 timeout이나 러너 중단으로 끝난 실행이에요. 성공으로 세지 않으므로 데이터는 그대로 낡고, 그 사실은 sync-recent가 알려줍니다. 워크플로 로그에서 cancelled 여부를 보세요.',
+      critical: false,
     },
     {
       id: 'access-times',

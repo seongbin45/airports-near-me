@@ -26,3 +26,47 @@
 | 권역이 다른 조합 (제주 구역 → 김포 등) | — | 계산하지 않는다(`planAccessTimes`의 권역 규칙). 육로가 없어 모든 제공자가 실패하기 때문 |
 | 이동 시간에 시각대 값이 없음 (실측이 전부 `any`) | 중 | 추천은 `any`(호출 시점 실시간 교통)로 물러서고 결과 카드에 그 사실을 표시한다(`accessBandMatched`). `npm run doctor`의 `access-bands` 게이트가 주의로 알린다. 채우려면 `npm run access-times -- --bands weekday_am,weekday_day,weekday_pm,weekend` |
 | 출발 시각을 반영하지 않는 제공자로 시각대 값을 만듦 | 중 | 저장하지 않는다(`supportsDepartureTime`). 실시간 전용(OSRM 등) 값에 "평일 아침" 딱지를 붙이면 컬럼이 거짓말을 하게 된다 |
+
+## 동기화 실행이 조용히 취소되는 문제 (2026-09-27)
+
+**증상** — 2026-09-25 21:07 UTC 정기 실행(`sync-flights`)이 `cancelled`로 끝났고, 36시간 동안 성공한 동기화가
+없었다(`npm run doctor`의 `sync-recent` 실패로 발견). 로그에는 `apis.data.go.kr:443` 연결 타임아웃이 반복됐고,
+TAGO 1,102회 중 111회를 22분 동안 두드리다 job `timeout-minutes: 30`에 걸려 취소됐다.
+
+**왜 조용한가** — GitHub이 timeout으로 끝낸 job은 `cancelled`가 되고 알림이 없다. 게다가
+`sync_runs` 행은 정상 종료 경로에서만 닫히므로(`lib/server/flight-sync.ts` `recordRun`)
+`ok=null, finished_at=null`로 남는다. `sync-recent`는 `ok === true`만 세므로 성공으로 오인하지는 않지만,
+"중단됐다"고 알려주지도 않는다. 그래서 두 곳을 고쳤다.
+
+1. **스스로 멈춘다** — `SYNC_DEADLINE_MS`(45분)와 연결 실패 회로 차단기(`TRANSPORT_FAIL_STREAK` = 5회 연속).
+   스스로 멈추면 `aborted`가 기록되고 `scripts/sync.mts`가 exit 1을 돌려 워크플로가 **실패**로 남는다.
+   워크플로 `timeout-minutes`는 60분 안전망으로만 남긴다.
+2. **중단을 보이게 한다** — `doctor`에 `sync-pending` 게이트(`SYNC_PENDING_HOURS` = 2시간).
+   끝나지 않은 실행이 있으면 `[주의]`로 표시한다(`critical: false` — 데이터가 낡았다는 사실은 `sync-recent`가 이미 말한다).
+
+**회로 차단기가 세는 대상** — `NETWORK`뿐 아니라 **재시도 가능한 오류(5xx·트래픽 초과)**도 센다.
+22분을 태운 경로가 타임아웃과 재시도였기 때문이다(`lib/data/data-go-kr.ts` — `retryable`).
+`FORMAT`·`DB 권한` 오류는 다시 물어도 같은 결과이므로 세지 않는다.
+
+**함께 고친 것** — `kac-full`이 실패하면 `tago-horizon`(1,102회)을 시작하지 않는다.
+2026-09-25에는 연결이 막힌 상태에서 TAGO를 그대로 돌려 22분을 버렸다.
+
+**아직 모르는 것** — 원인이 "해외 러너"인지 "그 시간대"인지. 표본이 각 1건이다
+(실패 1건 = 2026-09-25 21:07 UTC / 성공 1건 = 2026-09-25 02:47 UTC 수동 실행).
+그래서 cron을 호출량이 두 배가 되는 두 번째 실행 대신, 관측된 성공 시간대(**KST 11:00**)로 옮겼다.
+`DATA_GO_KR_KEY`는 운영 앱 런타임도 쓰므로(`lib/server/trip.ts`) 동기화 호출량을 늘리면 사용자 요청이
+트래픽 초과(코드 `22`)로 막힐 수 있다.
+
+**다음 실행이 또 실패하면** — 시간대 가설이 틀린 것이므로 국내 self-hosted runner 또는
+Supabase Edge Function(서울 리전)으로 옮긴다. 둘 다 네트워크 경로 자체를 바꾸는 조치다.
+
+**확인 방법** — `gh run list --workflow=sync-flights.yml --event schedule --limit 10`.
+14일 넘게 스케줄 실행이 없으면 저장소 비활성으로 워크플로가 꺼진 것이다(`gh workflow enable sync-flights`).
+
+## 로컬 실행에서 나는 두 가지 (2026-09-27)
+
+- **`Error: JWT issued at future`** — Supabase가 발급한 JWT의 `iat`가 실행 기계 시계보다 미래일 때 난다.
+  계획·조회 단계(`lib/server/paginate.ts`)에서 죽으므로 저장 전에 멈추고 그 회차는 아무것도 못 채운다.
+  **같은 명령을 다시 돌리면 통과한다**(실측). 반복되면 Windows 시계 동기화를 확인한다(관리자 권한으로 `w32tm /resync`).
+- **`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c`** — Node 25(비LTS) Windows의
+  종료 경로 문제로 보인다. 요약 줄이 다 찍힌 **뒤에** 나므로 결과·저장에 영향이 없다. CI는 Node 24(LTS)다.

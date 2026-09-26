@@ -277,3 +277,17 @@ git check-ignore -v .\airports-near-me-16-예시.patch
 
 **17 이후로는 브랜치 보호가 켜지면 main 직접 push 대신 PR 흐름을 쓴다(3-6장).**
 새 패치를 받으면 이 표의 다음 번호로 이어서 넣는다.
+
+## main 보호를 켠 뒤 달라지는 것 (2026-09-27)
+
+- **`git push origin main --force-with-lease`는 더 이상 통하지 않습니다.** 보호 규칙이 force push를 거부합니다.
+  지금까지처럼 `git commit --amend` 후 force push로 이력을 고치는 방법이 **사라집니다** — 잘못 올린 커밋은
+  되돌리는 커밋(`git revert <sha>`)으로 덮습니다. 이미 올라간 커밋을 고쳐 쓰는 것보다 새 커밋을 쌓는 편이
+  이 저장소에서 안전합니다(`docs/COMMIT_BOUNDARIES.md`의 `git add .` 습관과 같은 이유).
+- **main에 직접 push가 거부됩니다.** 이 세션의 변경은 브랜치 → PR → (CI 통과 후) squash 머지로만 들어갑니다(3-6장).
+  예외: 같은 SHA가 이미 다른 브랜치에서 `check`를 통과했으면 직접 push가 받아들여집니다(위반이 아닙니다).
+  그래서 검증 기준은 "직접 push가 거부되나"가 아니라 **"CI 없이 main에 들어간 커밋이 없는가"** 입니다.
+- **머지 방식이 squash 하나로 좁혀집니다** (`allow_merge_commit=false`, `allow_rebase_merge=false`).
+  `strict: false`에서는 검사가 PR head에서 평가되므로, 머지 커밋을 허용하면 **아무도 검사하지 않은 커밋**이
+  main에 올라갈 수 있습니다.
+- **`git am`으로 받은 패치는 이미 커밋입니다.** 브랜치에 push만 하면 됩니다 — 다시 커밋하지 마세요.

@@ -38,5 +38,9 @@ const print = (r: JobReport) => {
 const reports: JobReport[] = [];
 console.log(`운항 스케줄 동기화 ${today} (${trigger}${dryRun ? ', dry run' : ''})`);
 if (job === 'kac-full' || job === 'all') { reports.push(await syncKacFull(dryRun ? null : admin, opts)); print(reports.at(-1)!); }
-if ((job === 'tago-horizon' || job === 'all') && !dryRun) { reports.push(await syncTagoHorizon(admin, opts)); print(reports.at(-1)!); }
+// 한국공항공사가 실패하면 TAGO를 돌리지 않는다. 2026-09-25: 연결이 막힌 상태에서 TAGO 1,102회를 22분 동안
+// 두드리다 취소됐다 — 같은 이유로 실패할 호출을 미리 버리지 않는다.
+const kacFailed = job === 'all' && reports.length > 0 && !reports[reports.length - 1].ok;
+if (kacFailed) console.log('한국공항공사가 실패해 TAGO 전체 기간 동기화를 건너뜁니다 (같은 연결 문제로 실패할 가능성이 큽니다).');
+if ((job === 'tago-horizon' || job === 'all') && !dryRun && !kacFailed) { reports.push(await syncTagoHorizon(admin, opts)); print(reports.at(-1)!); }
 process.exit(reports.every(r => r.ok) ? 0 : 1);

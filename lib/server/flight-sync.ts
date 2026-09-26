@@ -138,6 +138,8 @@ export function planTagoDates(kacRows: { origin: string; dest: string; valid_to:
 
 export interface FullSyncOpts {
   serviceKey: string;
+  /** 이 시간을 넘기면 스스로 중단한다 (기본 SYNC_DEADLINE_MS) */
+  deadlineMs?: number;
   today: string;
   trigger?: Trigger;
   dryRun?: boolean;
@@ -152,13 +154,63 @@ export const KAC_EMPTY_STREAK = 7;
 /** 새로 받은 양이 기존의 이 비율보다 적으면 삭제하지 않는다 */
 export const MASS_DELETE_RATIO = 0.5;
 
+/**
+ * 연결·응답 계열 실패가 이만큼 이어지면 그 job을 멈춘다.
+ * 2026-09-25 21:07 UTC: 해외 러너에서 apis.data.go.kr 연결이 막혀 TAGO 1,102회 중 111회를 22분 동안 두드리다
+ * job timeout(30분)에 걸려 cancelled로 끝났다. 취소는 알림 없이 묻히므로 남은 호출도 함께 버려졌다.
+ */
+export const TRANSPORT_FAIL_STREAK = 5;
+
+/**
+ * 이 시간을 넘기면 스스로 중단한다. 워크플로 timeout(60분)보다 짧아야 의미가 있다 —
+ * 워크플로 timeout에 걸리면 GitHub이 job을 cancelled로 끝내고 sync_runs 행도 닫히지 않는다(ok=null, finished_at=null).
+ * 스스로 멈추면 aborted가 기록되고 sync.mts가 exit 1을 돌려 워크플로가 실패로 남는다.
+ */
+export const SYNC_DEADLINE_MS = 45 * 60_000;
+
+/**
+ * 회로 차단기가 세는 실패 — "연결이 막혔다"는 신호.
+ * NETWORK(연결·fetch 오류)와 재시도 가능한 오류(5xx·트래픽 초과)를 함께 센다.
+ * 2026-09-25에 22분을 태운 경로는 타임아웃과 재시도이므로 NETWORK만 세면 이 장치가 정확히 그 경우를 놓친다.
+ * FORMAT(응답 형식)처럼 다시 물어도 같은 결과인 오류와 DB 권한 오류는 세지 않는다.
+ */
+export function isTransportFailure(e: unknown): boolean {
+  if (isFatalDbError(e)) return false;
+  if (e instanceof DataGoKrError) return e.code === 'NETWORK' || e.retryable;
+  return true; // 분류할 수 없는 오류(TimeoutError 등)는 연결 실패로 본다
+}
+
+/** 연속 실패를 세고, 한계를 넘으면 멈출 이유를 돌려준다. 순수 함수라 테스트가 쉽다. */
+export function nextStreak(streak: number, e: unknown, limit = TRANSPORT_FAIL_STREAK): { streak: number; stop: string | null } {
+  if (!isTransportFailure(e)) return { streak: 0, stop: null };
+  const n = streak + 1;
+  return n >= limit
+    ? { streak: n, stop: `연결 실패가 ${n}번 이어져 멈춥니다 (${errText(e)}). 해외 러너에서 공공데이터포털 연결이 막힌 것으로 보입니다.` }
+    : { streak: n, stop: null };
+}
+
+/** 시작 후 내부 데드라인을 넘겼는가 */
+export const deadlineHit = (startedMs: number, nowMs: number, limitMs = SYNC_DEADLINE_MS) => nowMs - startedMs > limitMs;
+const deadlineMessage = (limitMs: number) =>
+  `내부 데드라인 ${Math.round(limitMs / 60_000)}분을 넘겨 스스로 멈춥니다 (워크플로 timeout으로 취소되는 것을 막는다)`;
+
 /** 한국공항공사: 오늘부터 날짜별 전 노선 조회 → 전부 저장, 이번에 안 보인 편 삭제 */
 export function syncKacFull(admin: SupabaseClient | null, o: FullSyncOpts & { maxDays?: number }) {
   return recordRun(o.dryRun ? null : admin, 'kac-full', o.trigger ?? 'manual', async (): Promise<JobReport & { preview?: FlightScheduleRecord[] }> => {
     const runAt = new Date().toISOString();
+    const startedMs = Date.now();
+    const deadlineMs = o.deadlineMs ?? SYNC_DEADLINE_MS;
     const all: FlightScheduleRecord[] = [];
     let calls = 0, empty = 0, d = o.today, last = o.today;
     for (let i = 0; i < (o.maxDays ?? 400) && empty < KAC_EMPTY_STREAK; i++, d = addDaysIso(d, 1)) {
+      if (deadlineHit(startedMs, Date.now(), deadlineMs)) {
+        // 덜 받은 상태로 저장·삭제하지 않는다 — 대량 삭제 방지와 같은 이유(받은 편이 적으면 지우면 안 된다).
+        const stop: JobReport & { preview?: FlightScheduleRecord[] } = {
+          job: 'kac-full', ok: false, fetched: all.length, saved: 0, removed: 0, calls, failed: [],
+          aborted: deadlineMessage(deadlineMs), note: `${o.today}~${d} 받다가 멈춤 (${i}일째)`,
+        };
+        return stop;
+      }
       const recs = await fetchKacByDate({ serviceKey: o.serviceKey, date: d, fetchImpl: o.fetchImpl });
       calls += Math.max(1, Math.ceil(recs.length / 100));
       if (recs.length) { empty = 0; last = d; all.push(...recs); } else empty++;
@@ -188,20 +240,24 @@ export function syncKacFull(admin: SupabaseClient | null, o: FullSyncOpts & { ma
 export function syncTagoHorizon(admin: SupabaseClient, o: FullSyncOpts) {
   return recordRun(o.dryRun ? null : admin, 'tago-horizon', o.trigger ?? 'manual', async (): Promise<JobReport> => {
     const runAt = new Date().toISOString();
+    const startedMs = Date.now();
+    const deadlineMs = o.deadlineMs ?? SYNC_DEADLINE_MS;
     const { data: kac, error } = await admin.from('flight_schedules').select('origin, dest, valid_to').eq('source', KAC_SOURCE).or(`valid_to.is.null,valid_to.gte.${o.today}`);
     if (error) throw error;
     const plan = planTagoDates(kac, o.today);
     const report: JobReport = { job: 'tago-horizon', ok: true, fetched: 0, saved: 0, removed: 0, calls: 0, failed: [] };
     const lastDate = plan.reduce((m, p) => (p.date > m ? p.date : m), o.today);
     report.note = `${new Set(plan.map(p => p.origin + p.dest)).size}개 노선 × ${o.today}~${lastDate}`;
-    let done = 0, lastPct = -1;
+    let done = 0, lastPct = -1, streak = 0;
 
     await pool(plan, o.concurrency ?? 4, async ({ origin, dest, date }) => {
       if (report.aborted) return;
+      if (deadlineHit(startedMs, Date.now(), deadlineMs)) { report.aborted = deadlineMessage(deadlineMs); return; }
       report.calls++;
       try {
         const recs = await fetchTagoDay({ serviceKey: o.serviceKey, date, origin, dest, fetchImpl: o.fetchImpl });
         report.fetched += recs.length;
+        streak = 0; // 응답을 받았으니 "연결이 막혔다"는 아니다
         if (!o.dryRun) {
           const { count: before } = await admin.from('flight_schedules').select('id', { count: 'exact', head: true })
             .eq('source', TAGO_SOURCE).eq('origin', origin).eq('dest', dest).eq('valid_from', date);
@@ -222,6 +278,11 @@ export function syncTagoHorizon(admin: SupabaseClient, o: FullSyncOpts) {
       } catch (e) {
         report.failed.push(`${origin}-${dest} ${date}: ${errText(e)}`);
         if ((e instanceof DataGoKrError && FATAL_CODES.has(e.code)) || isFatalDbError(e)) report.aborted = errText(e);
+        else {
+          const s = nextStreak(streak, e);
+          streak = s.streak;
+          if (s.stop) report.aborted = s.stop;
+        }
       }
       const pct = Math.floor((++done / plan.length) * 10) * 10;
       if (pct !== lastPct) { lastPct = pct; o.log?.(`TAGO ${done}/${plan.length}`); }
