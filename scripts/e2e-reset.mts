@@ -14,6 +14,7 @@
 //             (선택) E2E_PROJECT_REF — 보조 확인용
 //
 // `--check-only`를 붙이면 1) 표식 확인만 하고 끝낸다(개발 계정 자격증명 불필요).
+// 표식 테이블은 마이그레이션에 없다 — supabase/e2e-marker.sql 을 테스트 프로젝트에서 1회 실행한다.
 //
 // **순서 주의(2026-09-27)**: 날짜를 고르려면 운항 스케줄이 이미 있어야 하므로(아래 3단계)
 // 이 스크립트는 `npm run sync` **뒤에** 돌아야 한다. 그래서 데이터 워크플로는
@@ -45,9 +46,27 @@ const checkOnly = process.argv.includes('--check-only');
 // never 반환 호출로 보지 않아, 이 함수 뒤에서 값이 좁혀지지 않는다 (tsc: 'possibly null').
 const fail: (msg: string) => never = (msg) => { console.error(`중단: ${msg}`); process.exit(2); };
 
+/** 없으면 동기화·검사가 성립하지 않는 테이블. 나머지는 목록으로 알려만 준다. */
+const CRITICAL_TABLES = ['e2e_marker', 'regions', 'flight_schedules', 'profiles'];
+
 // ── 1) 이 DB가 테스트 전용인지 증명한다 (가장 먼저, 그리고 조회 오류도 중단 사유로 본다)
+// PostgREST가 "테이블이 없다"고 할 때의 문구. 표식 테이블은 마이그레이션에 없다(운영에 생기면 안 되므로
+// 수동으로 만든다 — supabase/e2e-marker.sql). 그래서 "없음"과 "값이 다름"을 구분해 안내해야 한다.
+// 구분하지 않으면 "운영 프로젝트인가?"와 "표식 만들기를 잊었나?"를 알 수 없어 왕복이 늘어난다(실제로 그랬다).
+const MISSING_TABLE = /could not find the table|schema cache|does not exist/i;
+
 const marker = await admin.from('e2e_marker').select('note').eq('id', 1).maybeSingle();
-if (marker.error) fail(`e2e_marker를 확인할 수 없어요: ${marker.error.message} — 테스트 전용 프로젝트가 아니거나 스키마가 달라요.`);
+if (marker.error) {
+  if (MISSING_TABLE.test(marker.error.message)) {
+    fail(
+      `이 프로젝트(${new URL(url).host})에 e2e_marker 표식 테이블이 없어요.\n` +
+      '  · 테스트 전용 프로젝트의 SQL Editor에서 supabase/e2e-marker.sql 을 실행하세요 (1회).\n' +
+      '  · 운영 프로젝트에는 절대 만들지 마세요 — 표식이 없어야 운영 DB를 보호합니다.\n' +
+      `  · 만들어도 이 오류가 그대로면 NEXT_PUBLIC_SUPABASE_URL(E2E_SUPABASE_URL)이 다른 프로젝트를 가리키고 있어요. (원문: ${marker.error.message})`,
+    );
+  }
+  fail(`e2e_marker를 확인할 수 없어요: ${marker.error.message}`);
+}
 const problem = markerProblem(marker.data?.note);
 if (problem) fail(problem);
 const ref = process.env.E2E_PROJECT_REF;
@@ -55,6 +74,24 @@ if (ref && !url.includes(ref)) fail(`NEXT_PUBLIC_SUPABASE_URL에 E2E_PROJECT_REF
 console.log(`표식 확인됨 — 테스트 전용 프로젝트(${new URL(url).host})로 진행합니다.`);
 
 if (checkOnly) {
+  // 표식만 보고 끝내면 다음 단계(sync)에서 스키마 문제로 또 멈춘다. 여기서 한 번에 훑어
+  // "무엇이 없는지"를 알려준다 — 워크플로 왕복을 줄이기 위한 것이다(2026-09-27).
+  const PROBE = ['e2e_marker', 'regions', 'countries', 'profiles', 'flight_schedules', 'flight_fetch_log',
+    'sync_runs', 'access_times', 'visits', 'class_timetable', 'ai_calls'];
+  const missing: string[] = [];
+  for (const t of PROBE) {
+    const { error } = await admin.from(t).select('*', { count: 'exact', head: true });
+    if (error && MISSING_TABLE.test(error.message)) missing.push(t);
+  }
+  if (missing.length) {
+    const critical = missing.filter(t => CRITICAL_TABLES.includes(t));
+    fail(
+      `스키마가 아직 없어요: ${missing.join(', ')}\n` +
+      '  · 테스트 전용 프로젝트에 supabase/migrations 를 적용하세요 (supabase db push, 또는 SQL Editor에서 마이그레이션 실행).\n' +
+      `  · 이 중 꼭 필요한 것: ${CRITICAL_TABLES.join(', ')}${critical.length ? ` — 지금 없는 것: ${critical.join(', ')}` : ''}`,
+    );
+  }
+  console.log(`스키마 확인: ${PROBE.length}개 테이블 모두 있음`);
   console.log('--check-only: 표식 확인만 하고 끝냅니다.');
   process.exit(0);
 }

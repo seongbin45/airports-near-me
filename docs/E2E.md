@@ -8,9 +8,14 @@ E2E는 계정을 지우고 다시 만들고, 수업·일정을 넣는다. 운영
 그래서 검사는 `e2e_marker` 표식이 있는 프로젝트에서만 돈다. 표식이 없으면(조회 오류 포함) 첫 단계에서 멈춘다 —
 URL·키·ref가 전부 틀려도 운영 DB에는 표식이 없으므로 운영 데이터를 건드리지 않는다.
 
+표식 테이블은 마이그레이션에 없다 — 운영 프로젝트에 생기면 보호가 무력해지기 때문이다.
+**테스트 프로젝트에서만** `supabase/e2e-marker.sql` 을 SQL Editor로 1회 실행한다.
+
 ```sql
-create table public.e2e_marker (id int primary key, note text);
-insert into public.e2e_marker values (1, 'e2e-test-project');
+-- supabase/e2e-marker.sql 과 같은 내용
+create table if not exists public.e2e_marker (id int primary key, note text not null);
+insert into public.e2e_marker (id, note) values (1, 'e2e-test-project')
+  on conflict (id) do update set note = excluded.note;
 alter table public.e2e_marker enable row level security;  -- 정책 없음 = 서비스 롤만 읽는다
 ```
 
@@ -93,7 +98,9 @@ PR마다 빨간 X가 쌓이지 않게 하려는 것이다. 건너뛸 때는 `::w
 
 | 증상 | 원인 |
 |---|---|
-| `중단: e2e_marker…` | 테스트 프로젝트가 아니거나 표식이 지워졌다. 운영 DB에서는 정상 동작이다 |
+| `중단: …에 e2e_marker 표식 테이블이 없어요` | 표식 만들기를 아직 안 했다(또는 URL이 다른 프로젝트다). 테스트 프로젝트 SQL Editor에서 `supabase/e2e-marker.sql` 실행 |
+| `중단: e2e_marker의 note가 …가 아니에요` | 표식 행의 값이 다르다. 운영 DB에서는 정상 동작이다(보호가 작동한 것) |
+| `중단: 스키마가 아직 없어요: …` | 테스트 프로젝트에 마이그레이션이 적용되지 않았다. `supabase db push` 또는 SQL Editor |
 | `환경변수 …가 없어요` (exit 2) | Secrets 누락 |
 | `표식 확인됨` 뒤 `실제 운항 스케줄이 없어요` | `e2e-data.yml`을 한 번 돌려 데이터를 채운다 |
 | 서버가 안 뜸 | `server.log` 아티팩트를 본다. 대개 env 누락(`NEXT_PUBLIC_*`를 빌드 전에 못 넣은 경우) |
