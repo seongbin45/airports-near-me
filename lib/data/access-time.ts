@@ -323,10 +323,15 @@ export function odsayTransitSource(key: string, fetchImpl: typeof fetch = fetch)
 
 /**
  * 응답: { metaData: { plan: { itineraries: [ { totalTime(초), transferCount, fare.regular.totalFare, legs, … } ] } } }
- * 오류: HTTP 400/500 + { result: { message, status } } — status 14 = "검색 결과가 없음"(경로 없음).
- * 요청 Body에 출발 시각 파라미터가 **없다**(그래서 시각대를 붙일 수 없다).
- * (문서 확인: transit.tmapmobility.com/guide/procedure, 2026-09-27. 상품 구매가 필요하고 키로 실측은 아직 —
- *  docs/UNVERIFIED_VALUES.md)
+ * 오류: { result: { message, status } } — status 14 = "검색 결과가 없음"(도착지 주변에 정류장이 없어 경로 없음).
+ * 문서의 Result Sample은 이 오류를 HTTP 200으로도 보여 준다. 그래서 상태 코드가 아니라 **본문 모양**으로 판단한다.
+ *
+ * 출발 시각: 문서(transit.tmapmobility.com/docs/routes, 2026-09-27 확인)에 `searchDttm`(타임머신, yyyymmddhhmi)이
+ * 있다. 예전 주석의 "요청 Body에 출발 시각 파라미터가 없다"는 **사실이 아니다**. 다만 그 값이 미래 시각을 받아
+ * "그날 평일 아침 기준" 경로를 주는지는 확인되지 않았고, 시각에 따라 달라지는 건 응답 `legs[].service`
+ * (1=운행중, 0=운행종료)로 알 수 있는 **운행 여부**뿐이다. 실측 전에 시각대 배치에 넣으면 `depart_band` 컬럼이
+ * 거짓말을 하게 되므로 `supportsDepartureTime`은 false로 둔다 — 이유는 "파라미터가 없어서"가 아니라
+ * "미확인이라서"다. (docs/UNVERIFIED_VALUES.md)
  */
 export function parseTmapTransit(httpStatus: number, body: unknown): TransitRoute {
   const result = obj(obj(body)?.result);
@@ -366,7 +371,8 @@ export function tmapTransitSource(appKey: string, fetchImpl: typeof fetch = fetc
   return {
     mode: 'transit',
     name: 'TMAP 대중교통',
-    // 출발 시각 파라미터가 없다 — 시각대 배치에 쓰면 "평일 아침"이라며 무관한 값을 저장하게 된다
+    // searchDttm(타임머신)이 문서에 있지만 미래 시각을 받는지 미확인이라 켜지 않는다. 켜면 "평일 아침" 딱지가
+    // 붙은 값이 실제로는 그 시각과 무관할 수 있다(위 parseTmapTransit 주석 참고).
     supportsDepartureTime: false,
     async minutes(from, to) {
       const res = await fetchImpl('https://apis.openapi.sk.com/transit/routes', {
