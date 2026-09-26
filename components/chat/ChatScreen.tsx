@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Badge, TopBar } from '@/components/ui';
 import { MODE_LABEL, type Mode, type Recommendation } from '@/lib/recommend';
+import type { Band } from '@/lib/data/access-bands';
 import { dateShortcuts, fmtDate, parseDate } from '@/lib/time';
 import { DEFAULT_REASONS, parseTime, reasonCrossCheck, type Step, type Visit } from '@/lib/chat/flow';
 import type { DayItem } from '@/lib/day';
@@ -23,7 +24,7 @@ interface Props {
 }
 
 interface Answers { dest?: string; date?: string; departure?: string; reason?: string }
-type Result = Recommendation & { regionMissing: boolean; tripId: number | null; publishedUntil: string | null };
+type Result = Recommendation & { regionMissing: boolean; tripId: number | null; publishedUntil: string | null; accessBand: Band };
 
 export default function ChatScreen(p: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);

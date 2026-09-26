@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Badge, SampleTag } from '@/components/ui';
 import { DOMESTIC_BUFFER_MIN, MODE_LABEL, STALE_DAYS, type Mode, type Recommendation, type RecommendRow } from '@/lib/recommend';
-import { bandTitle } from '@/lib/data/access-bands';
+import { bandTitle, type Band } from '@/lib/data/access-bands';
 import { fmtDur } from '@/lib/time';
 import type { DayItem } from '@/lib/day';
 
@@ -22,7 +22,7 @@ export interface Msg {
 interface Props {
   msgs: Msg[];
   // tripId는 추천이 DB에 기록된 뒤에만 있다(이동수단만 바꿔 다시 볼 때는 null).
-  result: (Recommendation & { regionMissing: boolean; tripId?: number | null }) | null;
+  result: (Recommendation & { regionMissing: boolean; tripId?: number | null; accessBand: Band }) | null;
   dest?: string;
   departure?: string;
   mode: Mode;
@@ -146,9 +146,8 @@ function Results({ result, dest, departure, mode }: { result: NonNullable<Props[
       )}
       {result.rows.some(r => !r.accessBandMatched) && (
         <div className="px-1 text-xs leading-normal text-warn text-pretty">
-          출발 시각대에 맞는 이동 시간이 아직 없어, 호출 시점의 실시간 교통으로 계산한 값을 썼어요
-          ({result.rows.find(r => !r.accessBandMatched)?.accessBand ?? 'any'}).
-          같은 시각대 값을 채우려면 <span className="font-semibold">npm run access-times -- --bands weekday_am,weekday_day,weekday_pm,weekend</span> 를 돌리세요.
+          {bandTitle(result.accessBand)} 기준 이동 시간이 아직 없어서, 조회한 시점의 실시간 교통으로 계산한 값을 썼어요.
+          실제 걸리는 시간과 다를 수 있어요.
         </div>
       )}
       {excluded.map(t => <div key={t} className="px-1 text-xs text-muted">{t}</div>)}

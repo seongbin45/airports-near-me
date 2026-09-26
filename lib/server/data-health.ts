@@ -33,6 +33,8 @@ export interface AccessStats {
   regions: number;
   airports: number;
   sample: number;
+  /** 실측 행의 시각대 분포 (depart_band → 건수). is_sample 행은 세지 않는다 */
+  byBand: Record<string, number>;
 }
 
 export interface RegionStats {
@@ -71,11 +73,11 @@ export interface Gate {
 /** 마지막 성공 실행이 이 시간 안이어야 정상으로 본다 (매일 03:00 KST 실행 기준) */
 export const SYNC_OK_HOURS = 30;
 
-const hoursSince = (iso: string | null, today: string) => {
+const hoursSince = (iso: string | null) => {
   if (!iso) return Infinity;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return Infinity;
-  // today는 "YYYY-MM-DD"라 시각 정보가 없다. 실행 시각 자체와 현재 시각의 차이만 본다.
+  // 실행 시각과 지금의 차이만 본다. today("YYYY-MM-DD")에는 시각 정보가 없다.
   return (Date.now() - t) / 3600_000;
 };
 
@@ -83,7 +85,10 @@ const hoursSince = (iso: string | null, today: string) => {
 export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } {
   const lastOk = i.runs.find(r => r.ok === true) ?? null;
   const lastRun = i.runs[0] ?? null;
-  const lastOkAge = lastOk ? hoursSince(lastOk.finishedAt ?? lastOk.startedAt, i.today) : Infinity;
+  const lastOkAge = lastOk ? hoursSince(lastOk.finishedAt ?? lastOk.startedAt) : Infinity;
+
+  const realAccess = i.access.rows - i.access.sample;
+  const bandedAccess = Object.entries(i.access.byBand).filter(([b]) => b !== 'any').reduce((n, [, c]) => n + c, 0);
 
   const gates: Gate[] = [
     {
@@ -117,6 +122,21 @@ export function dataHealth(i: HealthInput): { gates: Gate[]; exitCode: number } 
           ? `화면용 샘플 ${i.access.sample}건뿐이에요. npm run access-times 로 실측을 채우세요.`
           : `샘플 ${i.access.sample}건 포함`,
       critical: true,
+    },
+    {
+      id: 'access-bands',
+      // 시각대 값이 하나도 없으면 추천은 전부 'any'(호출 시점 실시간 교통)로 물러선다.
+      // 실측이 아예 없으면 access-times 게이트가 잡으므로 여기서는 통과로 둔다.
+      ok: realAccess === 0 || bandedAccess > 0,
+      headline: realAccess === 0
+        ? '이동 시간 시각대 — 실측 없음'
+        : `이동 시간 시각대 — 실측 ${realAccess}건 중 시각대 지정 ${bandedAccess}건`,
+      detail: realAccess === 0
+        ? '실측 접근 시간이 없어 시각대도 없어요.'
+        : bandedAccess === 0
+          ? `실측 ${realAccess}건이 모두 출발 시각 미지정(호출 시점 실시간 교통)이에요. 그 값은 계산한 시각의 교통을 반영하므로 "평균 소요시간"으로 쓰면 어긋납니다. 추천 화면은 물러선 사실을 표시하지만, 값을 채우려면: npm run access-times -- --bands weekday_am,weekday_day,weekday_pm,weekend`
+          : `시각대 지정 ${bandedAccess}건 · 나머지 ${realAccess - bandedAccess}건은 정확히 맞는 시각대가 없을 때만 쓰는 fallback이에요.`,
+      critical: false,
     },
     {
       id: 'regions-coords',

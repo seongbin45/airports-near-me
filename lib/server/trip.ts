@@ -5,7 +5,7 @@ import { dayPlan } from '../day';
 import { createAdminClient } from '../supabase/admin';
 import { ensureFresh, type EnsureResult } from './flight-sync';
 import { weekdayKo } from '../time';
-import { bandFor, bandsForLookup } from '../data/access-bands';
+import { bandFor, bandsForLookup, type Band } from '../data/access-bands';
 
 export interface TripInput {
   dest: string;
@@ -34,7 +34,7 @@ export async function loadDay(supabase: SupabaseClient, date: string) {
 }
 
 /** 거주지 기준 공항별 접근 시간 + 목적지행 편 → 추천. 모두 DB 값만 쓴다. */
-export async function loadRecommendation(supabase: SupabaseClient, userId: string, t: TripInput): Promise<Recommendation & { regionMissing: boolean; onDemand: EnsureResult | null; publishedUntil: string | null }> {
+export async function loadRecommendation(supabase: SupabaseClient, userId: string, t: TripInput): Promise<Recommendation & { regionMissing: boolean; onDemand: EnsureResult | null; publishedUntil: string | null; accessBand: Band }> {
   const { data: profile, error } = await supabase.from('profiles').select('region_id').eq('id', userId).single();
   if (error) throw error;
 
@@ -77,7 +77,7 @@ export async function loadRecommendation(supabase: SupabaseClient, userId: strin
     airportName: (a.airports as unknown as { name_ko: string; city: string } | null)?.name_ko.replace('국제공항', '') ?? a.airport,
     city: (a.airports as unknown as { name_ko: string; city: string } | null)?.city ?? null,
   }));
-  return { ...recommend(t.departure, accessTimes, pickBestSource(inSeason as Flight[])), regionMissing: !accessTimes.length, onDemand, publishedUntil: until?.valid_to ?? null };
+  return { ...recommend(t.departure, accessTimes, pickBestSource(inSeason as Flight[])), regionMissing: !accessTimes.length, onDemand, publishedUntil: until?.valid_to ?? null, accessBand: band };
 }
 
 async function fillOnDemand(origins: string[], dests: string[], date: string): Promise<EnsureResult | null> {

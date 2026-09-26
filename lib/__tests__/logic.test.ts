@@ -318,7 +318,7 @@ describe('dataHealth — 데이터 상태 게이트', () => {
   const base: HealthInput = {
     schedules: { total: 10, real: 10, sample: 0, bySource: { KAC: 10 }, coveringToday: 10, lastSyncedAt: '2026-09-25T03:00:00Z', publishedUntil: '2026-10-31' },
     runs: [{ job: 'kac-full', ok: true, startedAt: new Date(Date.now() - 3600_000).toISOString(), finishedAt: new Date(Date.now() - 3600_000).toISOString(), aborted: null, failed: 0, note: null }],
-    access: { rows: 3558, regions: 256, airports: 15, sample: 0 },
+    access: { rows: 3558, regions: 256, airports: 15, sample: 0, byBand: { any: 2022, weekday_am: 384, weekday_day: 384, weekday_pm: 384, weekend: 384 } },
     regions: { active: 250, withCoords: 250 },
     fetch: { errors: 0, empty: 3 },
     today: '2026-09-25',
@@ -350,14 +350,31 @@ describe('dataHealth — 데이터 상태 게이트', () => {
     expect(g.detail).toContain('publishable');
   });
   it('접근 시간이 없으면 치명 실패 (핵심 계산)', () => {
-    const r = dataHealth({ ...base, access: { rows: 0, regions: 0, airports: 0, sample: 0 } });
+    const r = dataHealth({ ...base, access: { rows: 0, regions: 0, airports: 0, sample: 0, byBand: {} } });
     expect(r.gates.find(g => g.id === 'access-times')!.ok).toBe(false);
     expect(r.exitCode).toBe(1);
   });
   it('화면용 샘플만 있으면 통과가 아니다', () => {
-    const g = gate({ ...base, access: { rows: 6, regions: 1, airports: 3, sample: 6 } }, 'access-times');
+    const g = gate({ ...base, access: { rows: 6, regions: 1, airports: 3, sample: 6, byBand: {} } }, 'access-times');
     expect(g.ok).toBe(false);
     expect(g.detail).toContain('샘플');
+  });
+  it('실측이 전부 "any"(시각대 미지정)면 주의 — 그 값은 계산한 시각의 교통을 반영한다', () => {
+    const noBand = { ...base, access: { ...base.access, byBand: { any: 3558 } } };
+    const g = gate(noBand, 'access-bands');
+    expect(g.ok).toBe(false);
+    expect(g.detail).toContain('npm run access-times');
+    expect(g.headline).toContain('시각대 지정 0건');
+    expect(dataHealth(noBand).exitCode).toBe(0); // 서비스는 돌아간다 (화면이 물러선 사실을 표시)
+  });
+  it('시각대가 채워지면 통과하고 fallback 남은 수를 알려준다', () => {
+    const g = gate(base, 'access-bands');
+    expect(g.ok).toBe(true);
+    expect(g.headline).toContain('시각대 지정 1536건');
+    expect(g.detail).toContain('fallback');
+  });
+  it('실측이 아예 없으면 시각대 게이트는 조용하다 (access-times가 잡는다)', () => {
+    expect(gate({ ...base, access: { rows: 6, regions: 1, airports: 3, sample: 6, byBand: {} } }, 'access-bands').ok).toBe(true);
   });
   it('좌표가 비면 주의지만 종료 코드는 유지된다', () => {
     const r = dataHealth({ ...base, regions: { active: 250, withCoords: 3 } });
