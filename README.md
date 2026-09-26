@@ -83,7 +83,7 @@ GitHub Actions: `.github/workflows/sync-flights.yml`. 저장소 Settings → Sec
 
 - 행정구역: 2026년 9월 기준 16개 시·도 (인천 구 개편, 전남광주통합특별시, 화성시 4개 구, 군위군 대구 편입). 개편 전 구역은 `valid_to`로 남겨 과거 방문 기록을 매핑한다. 행정안전부 행정표준코드(`adm_code`)로 교체 예정.
 - 공항: 한국공항공사 국내선 14개 + 인천.
-- 공항 접근 시간: 전국 행정구역 × 같은 권역 공항의 **차량** 소요시간(카카오모빌리티, 한도 소진 시 예비 제공자). 대중교통은 `ODSAY_KEY`가 생기면 채운다.
+- 공항 접근 시간: 전국 행정구역 × 같은 권역 공항의 **차량** 소요시간(카카오모빌리티, 한도 소진 시 예비 제공자). 대중교통은 `ODSAY_KEY`(1차, 무료·서버 IP 등록 필요)와 `TMAP_APP_KEY`(예비, 유료 상품)가 있으면 채운다.
 
 
 ## 입력 규칙과 기록
@@ -149,7 +149,7 @@ npm run doctor                   # 3) 얼마나 덮였는지 확인
 ```
 
 - 1) `supabase/migrations/20260925152000_region_coords.sql`이 `regions.lat/lng/geocoded_at`을 만든다. `scripts/geocode-regions.mts`가 좌표 없는 **유효** 구역만 골라 "경기도 수원시 영통구"처럼 질의한다. 카카오는 `x=경도, y=위도`이므로 파서가 **한국 좌표 범위(위도 32~39.5, 경도 124~132.5)를 검사**해 뒤바뀐 값을 버린다.
-- 2) 수단별 출처: 차량 = 카카오모빌리티 자동차 길찾기(`KAKAO_REST_KEY`, `summary.duration` 초 → 분), 대중교통 = ODsay(`ODSAY_KEY`, `info.totalTime` 분). 키가 있는 수단만 계산한다.
+- 2) 수단별 출처: 차량 = 카카오모빌리티 자동차 길찾기(`KAKAO_REST_KEY`, `summary.duration` 초 → 분), 대중교통 = ODsay(`ODSAY_KEY`, `info.totalTime` 분) → TMAP 대중교통(`TMAP_APP_KEY`, `metaData.plan.itineraries[0].totalTime` 초 → 분). 키가 있는 수단만 계산한다.
 - **지도 API 예비 체계** (`lib/data/map-chain.ts`): 앞 제공자의 한도가 다 되면 다음 제공자로 넘어간다. 키가 없는 제공자는 빠진다.
   - 차량: 카카오모빌리티 → TMAP(`TMAP_APP_KEY`) → 네이버 Directions 5(`NAVER_MAP_CLIENT_ID/SECRET`) → OSRM(키 없음, `OSRM_URL`)
   - 좌표: 카카오 로컬 → 네이버 Geocoding → Nominatim(키 없음, `NOMINATIM_URL`)
@@ -160,6 +160,7 @@ npm run doctor                   # 3) 얼마나 덮였는지 확인
 - **추정값을 만들지 않는다.** 직선거리로 환산한 시간은 그럴듯해 보이지만 추천 결과를 조용히 바꾼다. 파싱이 실패한 조합은 비워 두고 다음 실행에서 다시 시도하며, `npm run doctor`의 `access-times`·`regions-coords` 게이트가 덮인 비율을 보고한다.
 - `planAccessTimes()`(순수 함수·테스트 있음)가 대상을 정한다: 좌표 없는 조합 제외, 최근 `--refresh-days`(기본 30일) 안에 받은 실측은 건너뛰고, 화면용 샘플(`is_sample`)과 빈 조합을 먼저 채운다. `--limit`(기본 4000)이 이번 실행의 호출 상한이다. 한도가 다 되면 예비 제공자로 넘어가고, 모두 소진되면 멈춘다. 연속 `--max-fail`(기본 5)번 실패해도 멈춘다.
 - ODsay 응답 본문의 세부 필드는 실제 키로 한 번 받아 확인해야 한다. 파서가 `info.totalTime`을 못 찾으면 **받은 키 이름을 오류 메시지에 넣어** 바로 고칠 수 있게 했다(테스트에 고정).
+- TMAP 대중교통은 **초**를 준다(ODsay는 분 정수). 같은 컬럼에 저장하므로 `toMinutes`로 단위를 맞춘다 — 테스트에 `986초 → 16분`으로 고정했다. 일일 쿼터·요금은 확인 전이다(`docs/UNVERIFIED_VALUES.md`).
 
 
 ## 이동 시간의 시각대 (depart_band)

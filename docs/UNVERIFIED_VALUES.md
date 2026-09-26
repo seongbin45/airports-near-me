@@ -45,6 +45,8 @@ AI가 쓴 문장은 `lib/ai/verify.ts`가 코드로만 검사한다(LLM 재검�
 | 값 | 위치 | 상태 |
 |---|---|---|
 | TMAP 경로안내 응답 `features[0].properties.totalTime`(초)·오류 형식 | `parseTmapRoute` | 문서 기준, **키로 실측 전** |
+| TMAP 대중교통 응답 `metaData.plan.itineraries[0].totalTime`(초)·`transferCount`·`fare.regular.totalFare`, 오류 `result.status`(14=결과 없음)·HTTP 400/500 | `parseTmapTransit` | 문서 기준, **키로 실측 전**. **상품 구매 필요(유료)**, 일일 쿼터·요금 미확인 |
+| 대중교통 예비 체계: 1차 ODsay(무료, 서버 키는 등록한 고정 IP에서만 동작) → 예비 TMAP 대중교통(유료) | `buildAccessTimeSources` | ODsay가 IP·한도로 막혀도 대중교통 값을 계속 채우기 위한 것. 2026-09-27 현재 ODsay는 `ApiKeyAuthFailed`(IP 미등록으로 보임)로 한 건도 못 받았다 |
 | 네이버 Directions 5 `route.traoptimal[0].summary.duration`(밀리초)·Geocoding `addresses[].x/y`, 도메인 `maps.apigw.ntruss.com` | `parseNaverDriving`, `parseNaverGeocode` | 문서 기준, **키로 실측 전** |
 | OSRM·Nominatim 공용 서버 | `osrmCarSource`, `nominatimGeocoder` | 실제 호출로 확인. 실시간 교통 미반영(OSRM), 초당 1회 정책 |
 | 제공자마다 소요시간 기준이 다름 (카카오: 교통 반영 추천 경로, OSRM: 도로 속도만) | `access_times.source` | 출처를 행마다 저장. `npm run doctor`가 출처별 분포를 보여준다 |

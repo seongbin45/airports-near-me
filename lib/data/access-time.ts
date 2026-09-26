@@ -1,7 +1,8 @@
 // 집 → 공항 이동 시간 어댑터.
 //   차량: 카카오모빌리티(KAKAO_REST_KEY) → TMAP(TMAP_APP_KEY) → 네이버 Directions 5(NAVER_MAP_CLIENT_ID/SECRET) → OSRM(키 없음)
 //         앞 제공자의 한도가 다 되면 다음으로 넘어간다 (lib/data/map-chain.ts). 키가 없는 제공자는 빠진다.
-//   대중교통: ODsay 대중교통 길찾기 (ODSAY_KEY)
+//   대중교통: ODsay 대중교통 길찾기 (ODSAY_KEY) → TMAP 대중교통 (TMAP_APP_KEY)
+//             대중교통은 두 제공자 모두 출발 시각을 받지 않는다 — 시각대 배치에서 `any`만 계산한다(bandsForMode).
 //
 // 좌표는 regions 대표 좌표(또는 profiles.lat/lng) → airports 좌표.
 //
@@ -255,6 +256,9 @@ export function osrmCarSource(baseUrl: string = OSRM_PUBLIC, fetchImpl: typeof f
 
 export interface TransitRoute { minutes: number; payment: number | null; transfers: number | null }
 
+/** 응답 본문에서 사람이 읽을 키 목록 (형식이 바뀌었을 때 원인을 좁히려고) */
+const keysOf = (v: unknown) => Object.keys(obj(v) ?? {}).slice(0, 12).join(', ') || '없음';
+
 /**
  * 응답: { result: { path: [ { info: { totalTime(분), payment, busTransitCount, subwayTransitCount, … } } ] } }
  * 오류는 { error: { code, message } } 로 온다 (예: -8 필수값 형식 오류, -9 필수값 누락, 500 서버 오류).
@@ -315,6 +319,82 @@ export function odsayTransitSource(key: string, fetchImpl: typeof fetch = fetch)
   };
 }
 
+// ───────────── TMAP 대중교통 (SK open API) ─────────────
+
+/**
+ * 응답: { metaData: { plan: { itineraries: [ { totalTime(초), transferCount, fare.regular.totalFare, legs, … } ] } } }
+ * 오류: HTTP 400/500 + { result: { message, status } } — status 14 = "검색 결과가 없음"(경로 없음).
+ * 요청 Body에 출발 시각 파라미터가 **없다**(그래서 시각대를 붙일 수 없다).
+ * (문서 확인: transit.tmapmobility.com/guide/procedure, 2026-09-27. 상품 구매가 필요하고 키로 실측은 아직 —
+ *  docs/UNVERIFIED_VALUES.md)
+ */
+export function parseTmapTransit(httpStatus: number, body: unknown): TransitRoute {
+  const result = obj(obj(body)?.result);
+  if (result) {
+    const code = String(result.status ?? 'ERROR');
+    const message = String(result.message ?? '').trim();
+    const noRoute = code === '14' || /검색 결과가 없음/.test(message);
+    // 결과 없음(14)은 실패가 아니라 "길이 없다". 그 밖의 4xx는 요청·인증 문제라 다시 물어도 같으므로
+    // `exhaust`로 분류해 그 실행에서 이 제공자를 뺀다 — 'nodata'로 뭉개면 전 조합이 "경로 없음"으로
+    // 조용히 기록되고 아무도 못 알아챈다(ODsay 인증 실패를 "result가 없어요"로 뭉갠 적이 있다).
+    // 5xx는 서버 쪽 일시 오류라 재시도 가치가 있다.
+    const kindOverride: ErrorKind = noRoute ? 'nodata' : httpStatus >= 500 ? 'transient' : 'exhaust';
+    throw new AccessTimeError(`TMAP 대중교통 오류(${code}): ${message}`.trim(), noRoute ? '14' : code, false, kindOverride);
+  }
+  const plan = obj(obj(obj(body)?.metaData)?.plan);
+  if (!plan) {
+    if (httpStatus >= 500) throw new AccessTimeError(`TMAP 대중교통 서버 오류 (HTTP ${httpStatus})`, String(httpStatus), true);
+    throw new AccessTimeError(`TMAP 대중교통 응답 형식이 예상과 달라요. 받은 키: ${keysOf(body)}`, 'FORMAT', false);
+  }
+  const itineraries = arr(plan.itineraries);
+  if (!itineraries.length) throw new AccessTimeError('TMAP 대중교통 응답에 경로가 0건이에요.', '14', false);
+  const first = obj(itineraries[0]);
+  const total = numOrNull(first?.totalTime);
+  if (total == null) {
+    throw new AccessTimeError(
+      `TMAP 대중교통 응답에서 itineraries[0].totalTime을 찾지 못했어요. 받은 키: ${keysOf(first)}`, 'FORMAT', false);
+  }
+  // totalTime은 **초**다. ODsay는 분 정수를 준다 — 두 제공자를 같은 컬럼에 저장하므로 단위를 여기서 맞춘다.
+  return {
+    minutes: toMinutes(total),
+    payment: numOrNull(obj(obj(first?.fare)?.regular)?.totalFare),
+    transfers: numOrNull(first?.transferCount),
+  };
+}
+
+export function tmapTransitSource(appKey: string, fetchImpl: typeof fetch = fetch): AccessTimeSource {
+  return {
+    mode: 'transit',
+    name: 'TMAP 대중교통',
+    // 출발 시각 파라미터가 없다 — 시각대 배치에 쓰면 "평일 아침"이라며 무관한 값을 저장하게 된다
+    supportsDepartureTime: false,
+    async minutes(from, to) {
+      const res = await fetchImpl('https://apis.openapi.sk.com/transit/routes', {
+        method: 'POST',
+        headers: { appKey, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          startX: String(from.lng), startY: String(from.lat), endX: String(to.lng), endY: String(to.lat),
+          count: 1, lang: 0, format: 'json',
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      // 키 거부·상품 미구매·한도 초과는 본문과 무관하게 이 실행에서 제공자를 뺀다
+      if (res.status === 401 || res.status === 403) {
+        throw new AccessTimeError(
+          `TMAP 대중교통 키가 거부됐어요 (HTTP ${res.status}). TMAP_APP_KEY와 대중교통 상품 신청 여부를 확인하세요.`, 'KEY', false);
+      }
+      if (res.status === 429) throw new AccessTimeError('TMAP 대중교통 호출 한도를 넘었어요 (HTTP 429).', '429', false);
+      const text = await res.text();
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch {
+        // 게이트웨이가 JSON이 아닌 응답(HTML 오류 페이지 등)을 준 경우 — 본문 판독 전에 상태로 분류한다
+        throw httpError('TMAP 대중교통', res.status, 'TMAP_APP_KEY');
+      }
+      return parseTmapTransit(res.status, parsed).minutes;
+    },
+  };
+}
+
 export interface SourceOpts {
   /** 출발 시각을 반영하는 제공자만 (시각대 배치용). 비우면 실시간 제공자 목록 */
   departuresOnly?: boolean;
@@ -347,8 +427,20 @@ export function buildAccessTimeSources(env: SourceEnv, fetchImpl: typeof fetch =
     out.push(naverCarSource(env.NAVER_MAP_CLIENT_ID, env.NAVER_MAP_CLIENT_SECRET, fetchImpl));
   }
   if (env.OSRM_URL !== 'off') out.push(osrmCarSource(env.OSRM_URL || OSRM_PUBLIC, fetchImpl));
+  // 대중교통: 1차 ODsay(무료, 서버 키는 등록한 고정 IP에서만 동작한다) → 예비 TMAP 대중교통(유료 상품).
+  // ODsay가 IP·한도 문제로 막혀도 대중교통 값을 계속 채우기 위한 예비 체계다.
   if (env.ODSAY_KEY) out.push(odsayTransitSource(env.ODSAY_KEY, fetchImpl));
+  if (env.TMAP_APP_KEY) out.push(tmapTransitSource(env.TMAP_APP_KEY, fetchImpl));
   return out;
+}
+
+/**
+ * 수단별로 계산할 시각대를 고른다.
+ * 출발 시각을 반영하지 않는 수단(대중교통)은 `any`만 계산한다 —
+ * 그래야 `--bands weekday_am,weekday_pm`로 돌려도 대중교통 호출이 시각대 수만큼 늘지 않는다(한도·과금이 그만큼 늘어난다).
+ */
+export function bandsForMode(bands: Band[], available: { realtime: boolean; departure: boolean }): Band[] {
+  return bands.filter(b => (b === ANY_BAND ? available.realtime : available.departure));
 }
 
 // ───────────── 도달 가능 여부 ─────────────

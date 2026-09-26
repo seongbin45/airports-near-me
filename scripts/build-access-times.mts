@@ -14,7 +14,7 @@
 // 값을 못 구한 조합은 비워 두고 다음 실행에서 다시 시도한다. 추정값으로 채우지 않는다.
 import { createClient } from '@supabase/supabase-js';
 import {
-  airportZone, buildAccessTimeSources, planAccessTimes, regionZone, type AccessTimeSource, type ExistingRow, type LatLng, type SourceEnv,
+  airportZone, bandsForMode, buildAccessTimeSources, planAccessTimes, regionZone, type AccessTimeSource, type ExistingRow, type LatLng, type SourceEnv,
 } from '../lib/data/access-time';
 import { ANY_BAND, bandTitle, BANDS, isBand, nextDepartureAt, type Band } from '../lib/data/access-bands';
 import { createChain, type MapChain } from '../lib/data/map-chain';
@@ -76,7 +76,8 @@ const modeDep = (mode: Mode) => needsDeparture && chains.has(chainKey(mode, true
 const modeRt = (mode: Mode) => chains.has(chainKey(mode, false));
 
 const modes: Mode[] = keyMode ? [keyMode] : [...new Set([...chains.keys()].map(k => k.split('|')[0] as Mode))];
-const forMode = (mode: Mode): Band[] => bands.filter(b => (b === ANY_BAND ? modeRt(mode) : modeDep(mode)));
+// 시각대를 반영하지 못하는 수단은 `any`만 계획한다 (bandsForMode) — 대중교통 호출이 시각대 수만큼 늘지 않게
+const forMode = (mode: Mode): Band[] => bandsForMode(bands, { realtime: modeRt(mode), departure: modeDep(mode) });
 const planBands = [...new Set(modes.flatMap(forMode))];
 if (!planBands.length) {
   console.error('계산할 수단이 없어요. 차량은 OSRM_URL=off가 아니면 항상 있고, 대중교통은 ODSAY_KEY가 필요해요.');

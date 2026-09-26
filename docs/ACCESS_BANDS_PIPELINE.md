@@ -53,13 +53,14 @@ access_times 기존 ──┘    · refresh-days 안이면 건너뜀            
 |---|---|---|
 | 차량 (실시간, `any`) | 카카오모빌리티 길찾기 → TMAP → 네이버 → OSRM | ✗ |
 | 차량 (시각대) | **카카오모빌리티 미래 길찾기** | ✓ (`supportsDepartureTime`) |
-| 대중교통 (실시간) | ODsay | ✗ |
+| 대중교통 (실시간) | ODsay → TMAP 대중교통 (예비) | ✗ |
 | 대중교통 (시각대) | **없음** | — |
 | 좌표 | 카카오 → 네이버 → Nominatim | — |
 
 - 시각대 배치는 **출발 시각을 실제로 반영하는 제공자만** 쓴다(`buildAccessTimeSources(…, { departuresOnly: true })`).
   실시간 전용 제공자(OSRM 등)의 값을 "평일 아침"으로 저장하면 컬럼이 거짓말을 하게 되기 때문이다.
-- **그래서 대중교통 시각대는 만들 수 없다.** ODsay에 출발 시각 파라미터가 없어 계획에서 아예 빠진다.
+- **그래서 대중교통 시각대는 만들 수 없다.** ODsay와 TMAP 대중교통 **둘 다** 출발 시각 파라미터가 없어
+  계획에서 아예 빠진다(`bandsForMode`) — `--bands weekday_am,weekday_pm`로 돌려도 대중교통 호출은 늘지 않는다.
 - 오류 분류가 체인 동작을 정한다: `exhaust`(한도·키 거부·형식 변경)면 그 실행 동안 제공자를 빼고,
   `transient`는 1회 재시도 후 그 조합만 다음 제공자로, `nodata`는 "길 없음"으로 기록하고 다른 제공자에게 묻지 않는다
   (길찾기는 대개 결과가 같고, 지오코딩은 새 행정구역 이름이 한 곳에만 있을 수 있어 묻는다).
@@ -180,5 +181,6 @@ access_times 기존 ──┘    · refresh-days 안이면 건너뜀            
 | ODsay 일일 초기화가 자정 | https://lab.odsay.com/community/boardView?seq=694 | 2026-09-26 |
 | ODsay 서버 키는 고정 IP 필요·웹 키는 도메인으로 식별 | https://lab.odsay.com/community/boardView?seq=657 · seq=609 | 2026-09-26 |
 | ODsay 인증 실패 응답 형식(배열 오류) | https://lab.odsay.com/community/boardView?seq=596 | 2026-09-26 |
+| TMAP 대중교통: `POST /transit/routes`, 오류는 HTTP 400/500 + `result.status`(14=결과 없음), `totalTime` **초**, Body에 시각 파라미터 없음, **상품 구매 필요(유료)** | https://transit.tmapmobility.com/guide/procedure | 2026-09-27 |
 
 쿼터 수치는 바뀔 수 있다. **배치를 돌리기 전에 위 페이지를 다시 확인한다.**

@@ -14,7 +14,7 @@ describe('buildAccessTimeSources — 우선순위와 키', () => {
     expect(buildAccessTimeSources({ ODSAY_KEY: 'o', OSRM_URL: 'off' }).map(s => s.mode)).toEqual(['transit']);
     expect(buildAccessTimeSources({
       KAKAO_REST_KEY: 'k', TMAP_APP_KEY: 't', NAVER_MAP_CLIENT_ID: 'n', NAVER_MAP_CLIENT_SECRET: 's', ODSAY_KEY: 'o',
-    }).map(s => s.name)).toEqual(['카카오모빌리티 길찾기', 'TMAP 자동차 경로', '네이버 Directions 5', 'OSRM(OpenStreetMap)', 'ODsay 대중교통']);
+    }).map(s => s.name)).toEqual(['카카오모빌리티 길찾기', 'TMAP 자동차 경로', '네이버 Directions 5', 'OSRM(OpenStreetMap)', 'ODsay 대중교통', 'TMAP 대중교통']);
   });
   it('네이버는 ID·시크릿이 둘 다 있어야 들어간다', () => {
     expect(buildAccessTimeSources({ NAVER_MAP_CLIENT_ID: 'n', OSRM_URL: 'off' })).toEqual([]);

@@ -123,7 +123,7 @@ npm run access-times -- --bands "weekday_am,weekday_day,weekday_pm,weekend" --li
       while :; do npm run access-times -- --bands weekday_am,weekday_day,weekday_pm,weekend --limit 4000; \
         echo "--- 다음 회차 ---"; done   # '계산할 것이 없어요.' 가 보이면 중단
       ```
-- [ ] 대중교통 시각대는 지금 **계산할 수 없다**. `ODSAY_KEY`가 있어도 대중교통 쪽에 출발 시각을 반영하는
+- [ ] 대중교통 시각대는 지금 **계산할 수 없다**(ODsay·TMAP 대중교통 **둘 다** 출발 시각 파라미터가 없다). `ODSAY_KEY`가 있어도 대중교통 쪽에 출발 시각을 반영하는
       제공자가 없어서 `--mode transit --bands …`는 `계산할 수단이 없어요.`로 끝난다(exit 2). 차량만 돌린다.
 - [ ] 진행 상황은 100건마다 `… 400/4000 (12.3분) 저장 380 · 경로 없음 0 · 오류 20` 형태로 찍힌다.
       회차당 걸리는 시간은 제공자 응답 속도에 달려 있으니 이 줄로 가늠한다.
@@ -208,6 +208,9 @@ npm run access-times -- --bands "weekday_am,weekday_day,weekday_pm,weekend" --li
 | `계산할 수단이 없어요.` (exit 2) | 차량 소스도 없고 대중교통도 없음 | `OSRM_URL=off`로 꺼 두지 않았는지 확인. 대중교통은 `ODSAY_KEY` 필요 |
 | `ODsay 오류(500): [ApiKeyAuthFailed] ApiKey authentication failed.` | 서버 키 인증 실패 — **등록한 IP와 호출 IP가 다르거나 키 플랫폼이 서버가 아님** | 0장의 공인 IP 확인 절차로 IP를 다시 등록(설정 반영 최대 1분). 이 오류가 나면 그 실행에서 ODsay는 빠진다 |
 | `ODsay 응답에 result가 없어요.` | 오류 본문을 못 읽은 경우(형식 변경) | `ODsay 오류(…)` 형태가 아니면 응답 본문을 확인해 `lib/data/access-time.ts`의 `odsayError`를 맞춘다 |
+| `TMAP 대중교통 오류(14): 검색 결과가 없음` | 경로가 없는 조합 — 실패가 아니다 | 저장되지 않으므로 **다음 회차에 다시 호출된다**(한도를 다시 쓴다) |
+| `TMAP 대중교통 키가 거부됐어요 (HTTP 401/403)` | 키 미승인 또는 **대중교통 상품 미신청**(유료) | openapi.sk.com에서 상품·한도 확인. 그 실행에서 TMAP만 빠지고 ODsay는 남는다 |
+| `TMAP 대중교통 응답 형식이 예상과 달라요. 받은 키: …` | 응답 형식 변경(문서와 다름) | 받은 키를 `parseTmapTransit`과 대조해 맞춘다(`docs/UNVERIFIED_VALUES.md`) |
 | `시각대 weekday_am의 출발 시각을 계산할 수 없어요.` (exit 2) | 출발 시각 산출 실패(시계·요일 처리 이상) | 서버 시각을 확인하고 다시 실행. 재현되면 `lib/data/access-bands.ts`를 본다 |
 | `airports 조회 실패: …` (exit 2) | DB 접속·권한 | `SUPABASE_SERVICE_ROLE_KEY`가 secret 키인지 확인 |
 | `좌표가 있는 지역이 없어요. 먼저 npm run geocode-regions 를 돌리세요.` (exit 1) | `regions.lat/lng`가 비었음 | 지오코딩 배치를 먼저 돌린다 |
