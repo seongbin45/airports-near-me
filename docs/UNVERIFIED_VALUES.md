@@ -45,7 +45,11 @@ AI가 쓴 문장은 `lib/ai/verify.ts`가 코드로만 검사한다(LLM 재검�
 | 값 | 위치 | 상태 |
 |---|---|---|
 | TMAP 경로안내 응답 `features[0].properties.totalTime`(초)·오류 형식 | `parseTmapRoute` | 문서 기준, **키로 실측 전** |
-| TMAP 대중교통 응답 `metaData.plan.itineraries[0].totalTime`(초)·`transferCount`·`fare.regular.totalFare`, 오류 `result.status`(14=결과 없음)·HTTP 400/500 | `parseTmapTransit` | 문서 기준, **키로 실측 전**. **상품 구매 필요(유료)**, 일일 쿼터·요금 미확인 |
+| TMAP 대중교통 응답 `metaData.plan.itineraries[0].totalTime`(초)·`transferCount`·`fare.regular.totalFare` | `parseTmapTransit` | 문서 기준, **키로 실측 전**. **상품 구매 필요(유료)** |
+| TMAP 대중교통 오류 `result.status`(14=경로 없음)의 HTTP 상태 | `parseTmapTransit` | 문서 Result Sample이 **HTTP 200**으로 보여 줌([에러 코드](https://tmap-public-skopenapi.readme.io/reference/error-code-34)). 그래서 상태 코드가 아니라 본문으로 판단한다 — 실측 전 |
+| TMAP 대중교통 `searchDttm`(타임머신, yyyymmddhhmi)이 **미래 시각**을 받아 그 시각 기준 경로를 주는지 | `tmapTransitSource.supportsDepartureTime` | 파라미터 **존재는 문서로 확인**(transit.tmapmobility.com/docs/routes). 미래 시각 허용 여부는 미확인 → 그래서 아직 `false`. 확인 전에 켜면 `depart_band`가 거짓말을 한다 |
+| TMAP 대중교통 `legs[].service`(1=운행중, 0=운행종료)가 0일 때 `totalTime`의 뜻 (경로 없음 14가 오는지, 시간표 기준 값이 오는지) | `parseTmapTransit` | 문서에 필드 정의만 있음, 동작 미확인. 배치가 심야에 돌면 문제가 될 수 있다 |
+| TMAP 대중교통 일일 쿼터·요금 | 시각대 배치 비용 | 미확인 (SK open API 요금 페이지가 JS 렌더라 크롤 불가) |
 | 대중교통 예비 체계: 1차 ODsay(무료, 서버 키는 등록한 고정 IP에서만 동작) → 예비 TMAP 대중교통(유료) | `buildAccessTimeSources` | ODsay가 IP·한도로 막혀도 대중교통 값을 계속 채우기 위한 것. 2026-09-27 현재 ODsay는 `ApiKeyAuthFailed`(IP 미등록으로 보임)로 한 건도 못 받았다 |
 | 네이버 Directions 5 `route.traoptimal[0].summary.duration`(밀리초)·Geocoding `addresses[].x/y`, 도메인 `maps.apigw.ntruss.com` | `parseNaverDriving`, `parseNaverGeocode` | 문서 기준, **키로 실측 전** |
 | OSRM·Nominatim 공용 서버 | `osrmCarSource`, `nominatimGeocoder` | 실제 호출로 확인. 실시간 교통 미반영(OSRM), 초당 1회 정책 |

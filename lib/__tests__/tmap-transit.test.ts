@@ -51,6 +51,27 @@ describe('parseTmapTransit', () => {
   it('plan은 있는데 경로가 0건이면 결과 없음', () => {
     expect(kindOf(() => parseTmapTransit(200, { metaData: { plan: { itineraries: [] } } }))).toBe('nodata');
   });
+  // 문서의 Result Sample은 이 오류를 HTTP 200으로 보여 준다 — 400만 처리하면 실호출에서 조용히 형식 오류가 된다
+  it('status 14가 HTTP 200으로 와도 경로 없음이다 (문서 Result Sample 형태)', () => {
+    expect(kindOf(() => parseTmapTransit(200, { result: { message: '검색 결과가 없음', status: 14 } }))).toBe('nodata');
+  });
+  // 문서 Response 표에 있는 requestParameters.reqDttm(요청 시각)·legs[].service(1=운행중/0=운행종료)가
+  // 섞여 들어와도 같은 값을 읽어야 한다. 이 필드들이 생기면 totalTime을 못 찾게 되는 회귀를 막는다.
+  it('문서에 있는 요청 시각·운행 여부 필드가 섞여도 totalTime을 그대로 읽는다', () => {
+    const body = {
+      metaData: {
+        requestParameters: { reqDttm: '20260927063000', startX: '127.02', startY: '37.50', endX: '126.80', endY: '37.55' },
+        plan: { itineraries: [{
+          totalTime: 986, transferCount: 1, fare: { regular: { totalFare: 1500 } },
+          legs: [{ mode: 'WALK', sectionTime: 110, service: 1 }, { mode: 'SUBWAY', sectionTime: 876, service: 1 }],
+        }] },
+      },
+    };
+    const r = parseTmapTransit(200, body);
+    expect(r.minutes).toBe(16);
+    expect(r.payment).toBe(1500);
+    expect(r.transfers).toBe(1);
+  });
 });
 
 describe('대중교통 제공자 체인', () => {
