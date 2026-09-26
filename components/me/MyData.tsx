@@ -11,6 +11,7 @@ import type { AccessRow, AiCallRow } from '@/app/me/page';
 import { PROVIDER_LABEL, type ProviderId } from '@/lib/ai/providers-meta';
 import type { PendingVisit } from '@/lib/visits';
 import { isDeliberateConfirm } from '@/lib/confirm';
+import { fetchAllRows, PAGE_SIZE } from '@/lib/server/paginate';
 import { inferTimelineTrips, parseAirportVisits, type AirportPoint } from '@/lib/data/timeline-import';
 
 interface Visit { id: number; trip_id: number | null; dest_city: string; visited_on: string; reason: string | null; from_airport: string | null; source: string; is_sample: boolean }
@@ -184,11 +185,20 @@ export default function MyData(p: Props) {
     // 사용자 데이터 테이블 전부 (visit_candidates: 타임라인 파일에서 온 확인 대기 후보)
     const tables = ['profiles', 'class_timetable', 'schedules', 'visits', 'visit_candidates', 'trips', 'ai_calls', 'location_consents'] as const;
     const out: Record<string, unknown> = { exported_at: new Date().toISOString(), email: p.email };
+    const counts: Record<string, number> = {};
     for (const t of tables) {
-      const { data, error } = await supabase.from(t).select('*');
-      if (fail(error)) return;
-      out[t] = data;
+      try {
+        // PostgREST는 한 번에 1,000행까지만 준다. 개인정보 내보내기가 상한에 걸려 조용히 잘리면
+        // 사용자는 일부만 받고도 그걸 알 수 없으므로 끝까지 나눠 받는다(lib/server/paginate.ts).
+        // .order('id')가 있어야 페이지 사이에 행이 섞이지 않는다.
+        out[t] = await fetchAllRows<unknown>(f => supabase.from(t).select('*').order('id').range(f, f + PAGE_SIZE - 1));
+        counts[t] = (out[t] as unknown[]).length;
+      } catch (e) {
+        fail({ message: e instanceof Error ? e.message : String(e) });
+        return;
+      }
     }
+    out._row_counts = counts;
     const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
     Object.assign(document.createElement('a'), { href: url, download: 'my-data.json' }).click();
     URL.revokeObjectURL(url);
