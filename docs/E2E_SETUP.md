@@ -110,6 +110,18 @@ select count(*) from public.e2e_marker;                                      -- 
 
 ## 이 워크플로가 하는 일
 
+### 실행 순서 (2026-09-27 교정)
+
+1. `npm run e2e:check` — 표식만 확인 (운영 DB 보호. 자격증명·데이터 불필요)
+2. `npm run sync -- kac-full` / `npm run sync -- tago-horizon`
+3. `npm run e2e:reset` — 계정 초기화 + 검사 날짜 (2에서 스케줄이 채워져야 성공)
+4. `npm run e2e:seed` — 접근 시간 고정값
+5. `npm run doctor`
+
+예전에는 3이 2보다 먼저였다. 빈 테스트 프로젝트에서는 3이 "실제 운항 스케줄이 없어요"로 멈춰
+첫 실행이 성공할 수 없었고, 워크플로가 `DEV_TEST_EMAIL`을 넘기지 않아 `e2e:reset`이
+`환경변수 DEV_TEST_EMAIL가 없어요`(exit 2)로 죽었다. 둘 다 위 순서와 env로 고쳤다.
+
 `e2e:reset`(표식 확인) → `sync kac-full` → `sync tago-horizon` → `e2e:seed` → `doctor`.
 
 `e2e:seed`가 **거주지→공항 접근 시간 고정값**(`source = E2E 고정값`)을 넣는다 — 없으면 추천이 계산되지 않아

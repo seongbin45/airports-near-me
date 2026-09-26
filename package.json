@@ -13,6 +13,7 @@
     "delete-dev-account": "tsx --env-file-if-exists=.env.local scripts/delete-dev-account.mts",
     "e2e": "node --env-file-if-exists=.env.local scripts/e2e.mjs",
     "e2e:reset": "tsx --env-file-if-exists=.env.local scripts/e2e-reset.mts",
+    "e2e:check": "tsx --env-file-if-exists=.env.local scripts/e2e-reset.mts --check-only",
     "e2e:seed": "tsx --env-file-if-exists=.env.local scripts/e2e-seed.mts",
     "geocode-regions": "tsx --env-file-if-exists=.env.local scripts/geocode-regions.mts",
     "access-times": "tsx --env-file-if-exists=.env.local scripts/build-access-times.mts"

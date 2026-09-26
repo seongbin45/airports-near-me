@@ -12,6 +12,14 @@
 //
 // 필요한 env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEV_TEST_EMAIL, DEV_TEST_PASSWORD
 //             (선택) E2E_PROJECT_REF — 보조 확인용
+//
+// `--check-only`를 붙이면 1) 표식 확인만 하고 끝낸다(개발 계정 자격증명 불필요).
+//
+// **순서 주의(2026-09-27)**: 날짜를 고르려면 운항 스케줄이 이미 있어야 하므로(아래 3단계)
+// 이 스크립트는 `npm run sync` **뒤에** 돌아야 한다. 그래서 데이터 워크플로는
+// 표식 확인(`--check-only`) → sync → 이 스크립트 → 시드 순으로 돈다.
+// 예전에는 sync보다 먼저 돌았는데, 빈 테스트 프로젝트에서는 "실제 운항 스케줄이 없어요"로
+// 멈춰서 첫 실행이 영원히 성공할 수 없었다.
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { markerProblem } from '../lib/server/e2e-guard';
@@ -23,9 +31,15 @@ const need = (k: string) => {
 };
 
 const url = need('NEXT_PUBLIC_SUPABASE_URL');
-const email = need('DEV_TEST_EMAIL');
-const password = need('DEV_TEST_PASSWORD');
 const admin = createClient(url, need('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
+
+/**
+ * `--check-only`: 이 DB가 테스트 전용인지만 증명하고 끝낸다.
+ * 데이터 동기화 워크플로가 sync보다 먼저 돌려 "운영 DB에 쓰지 않는다"만 확인할 때 쓴다.
+ * 이때는 개발 계정 자격증명이 필요 없다 — 그래서 아래 need() 호출을 표식 확인 뒤로 미뤘다.
+ * (워크플로가 DEV_TEST_*를 안 넘겨서 CI가 exit 2로 멈춘 적이 있다.)
+ */
+const checkOnly = process.argv.includes('--check-only');
 
 // 타입을 **변수에** 명시한다. 화살표 함수에만 : never를 붙이면 TS가 제어 흐름 분석에서
 // never 반환 호출로 보지 않아, 이 함수 뒤에서 값이 좁혀지지 않는다 (tsc: 'possibly null').
@@ -40,7 +54,14 @@ const ref = process.env.E2E_PROJECT_REF;
 if (ref && !url.includes(ref)) fail(`NEXT_PUBLIC_SUPABASE_URL에 E2E_PROJECT_REF(${ref})가 없어요: ${url}`);
 console.log(`표식 확인됨 — 테스트 전용 프로젝트(${new URL(url).host})로 진행합니다.`);
 
-// ── 2) 개발 계정 초기화
+if (checkOnly) {
+  console.log('--check-only: 표식 확인만 하고 끝냅니다.');
+  process.exit(0);
+}
+
+// ── 2) 개발 계정 초기화 — 여기서부터 자격증명이 필요하다
+const email = need('DEV_TEST_EMAIL');
+const password = need('DEV_TEST_PASSWORD');
 const findUser = async () => {
   for (let page = 1; page <= 20; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
