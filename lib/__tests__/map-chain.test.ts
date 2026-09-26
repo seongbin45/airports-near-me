@@ -150,6 +150,19 @@ describe('지도 API 예비 체계 (map-chain)', () => {
     expect(waits).toEqual([1000]);
   });
 
+  it('병렬 4개가 동시에 불러도 공용 서버 간격을 지킨다 (배치 --concurrency 4 + OSRM·Nominatim 정책)', async () => {
+    const t = 0; // 네 작업이 같은 순간에 들어온다
+    const waits: number[] = [];
+    const calledAt: number[] = [];
+    const chain = createChain([{ name: 'OSRM', minIntervalMs: 1100, call: async () => { calledAt.push(calledAt.length); return 1; } }], {
+      now: () => t, sleep: async ms => { waits.push(ms); },
+    });
+    await Promise.all([chain.run(1), chain.run(2), chain.run(3), chain.run(4)]);
+    // 자리를 먼저 잡으므로 0 / 1100 / 2200 / 3300ms에 한 번씩 — 같은 시각에 둘이 나가지 않는다
+    expect(waits.sort((a, b) => a - b)).toEqual([1100, 2200, 3300]);
+    expect(calledAt).toHaveLength(4);
+  });
+
   it('실제 HTTP 흐름: 카카오 429 → OSRM', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).includes('kakaomobility')
       ? new Response('{"code":-10,"msg":"API limit has been exceeded."}', { status: 429 })

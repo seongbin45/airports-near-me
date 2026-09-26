@@ -154,7 +154,7 @@ npm run doctor                   # 3) 얼마나 덮였는지 확인
   - 차량: 카카오모빌리티 → TMAP(`TMAP_APP_KEY`) → 네이버 Directions 5(`NAVER_MAP_CLIENT_ID/SECRET`) → OSRM(키 없음, `OSRM_URL`)
   - 좌표: 카카오 로컬 → 네이버 Geocoding → Nominatim(키 없음, `NOMINATIM_URL`)
   - 한도(429)·키 거부(401/403)·응답 형식 변경 → 그 제공자를 그 실행 동안 뺀다 / 5xx·네트워크 → 1회 재시도 후 그 조합만 다음 제공자로 / 좌표 주변 도로 못 찾음(카카오 101~106) → 그 조합만 다음 제공자로 / 경로 없음 → 다른 제공자에게 묻지 않음(좌표는 못 찾으면 다음 제공자에게 묻는다) / 모두 소진 → 배치 중단, 다음 실행에서 이어감
-  - 공용 OSRM·Nominatim은 초당 1회로 호출하고 실시간 교통을 반영하지 않는다(OSRM). 어느 제공자 값인지는 `access_times.source`, `regions.geocode_source`에 남고 `npm run doctor`가 분포를 보여준다.
+  - 공용 OSRM·Nominatim은 초당 1회로 호출하고 실시간 교통을 반영하지 않는다(OSRM). 배치를 `--concurrency 4`로 돌려도 체인이 제공자별 호출 시각을 먼저 예약해 간격을 지킨다(병렬 테스트 있음). 지오코딩 배치는 순차 실행. 어느 제공자 값인지는 `access_times.source`, `regions.geocode_source`에 남고 `npm run doctor`가 분포를 보여준다.
 - 권역 규칙: 제주 구역 ↔ 제주공항만, 육지 구역 ↔ 육지 공항만 계산한다(울릉군은 공항 없음). 길이 없는 조합을 부르지 않는다.
 - 공항 좌표는 여객 터미널(도로 주소가 있는 지점)이다. 활주로 근처 근사값이면 카카오가 "도착 지점 주변 도로 없음(103)"으로 실패한다.
 - **추정값을 만들지 않는다.** 직선거리로 환산한 시간은 그럴듯해 보이지만 추천 결과를 조용히 바꾼다. 파싱이 실패한 조합은 비워 두고 다음 실행에서 다시 시도하며, `npm run doctor`의 `access-times`·`regions-coords` 게이트가 덮인 비율을 보고한다.
