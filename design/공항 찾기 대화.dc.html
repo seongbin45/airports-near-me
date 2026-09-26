@@ -108,7 +108,7 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
                               <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
                                 <div style="font-size:11px;color:#7a7067">탑승 편 · {{ r.flightNo }}</div>
                                 <div style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.dep }} → {{ r.arr }}</div>
-                                <div style="font-size:11px;color:#9a9087">운항 스케줄 DB</div>
+                                <div style="font-size:11px;color:{{ r.flightSrcColor }}">{{ r.flightSrc }}</div>
                               </div>
                               <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
                                 <div style="font-size:11px;color:#7a7067">공항 도착 여유</div>
@@ -118,8 +118,14 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
                             </div>
                           </div>
                         </sc-for>
+                        <sc-if value="{{ m.showMeLink }}" hint-placeholder-val="{{ false }}">
+                          <div style="font-size:12px;color:#7a7067;line-height:1.5;padding:0 4px;text-wrap:pretty">다녀온 뒤에는 <a href="내 데이터.dc.html" style="font-weight:600">내 데이터</a>에서 이 여정을 확인하고 방문 기록으로 남길 수 있어요.</div>
+                        </sc-if>
+                        <sc-if value="{{ m.noAccess }}" hint-placeholder-val="{{ false }}">
+                          <div style="font-size:12px;color:#9a5a1e;line-height:1.5;padding:10px 12px;background:#fbeedd;border-radius:12px;text-wrap:pretty">{{ m.noAccess }}</div>
+                        </sc-if>
                         <sc-if value="{{ m.noRoute }}" hint-placeholder-val="{{ false }}">
-                          <div style="font-size:12px;color:#7a7067;padding:0 4px">{{ m.noRoute }}</div>
+                          <div style="font-size:12px;color:#7a7067;padding:0 4px;white-space:pre-line;line-height:1.5">{{ m.noRoute }}</div>
                         </sc-if>
                       </div>
                     </sc-if>
@@ -225,9 +231,11 @@ class Component extends DCLogic {
   data() {
     return {
       access: {
-        '차량': { GMP: 55, CJJ: 80, ICN: 95, src: '카카오모빌리티 경로' },
-        '대중교통': { GMP: 75, CJJ: 125, ICN: 110, src: 'ODsay 대중교통 경로' }
+        '차량': { GMP: 55, CJJ: 80, ICN: 95, src: '카카오모빌리티 길찾기 · 평일 낮(13:00) 기준' },
+        '대중교통': { src: 'ODsay 대중교통' }
       },
+      fares: { GMP: 68900, CJJ: 54200, ICN: null },
+      syncedDays: { GMP: 1, CJJ: 1, ICN: 9 },
       airports: { GMP: '김포', CJJ: '청주', ICN: '인천' },
       flights: {
         '제주': {
@@ -262,22 +270,32 @@ class Component extends DCLogic {
 
   results(dest) {
     const d = this.data(), acc = d.access[this.mode()], fl = d.flights[dest] || {};
-    const start = this.toMin('14:30'), rows = [], missing = [];
+    const start = this.toMin('14:30'), rows = [], missing = [], noAccess = [], noFlight = [];
     Object.keys(d.airports).forEach(code => {
       const list = fl[code];
       if (!list) { missing.push(d.airports[code]); return; }
+      if (acc[code] == null) { noAccess.push(d.airports[code]); return; }
       const atAirport = start + acc[code];
       const f = list.find(x => this.toMin(x[1]) - 40 >= atAirport);
-      if (!f) return;
+      if (!f) { noFlight.push(d.airports[code]); return; }
+      const fare = d.fares[code], days = d.syncedDays[code];
+      const stale = days >= 7;
       rows.push({ code, name: d.airports[code] + '공항', access: this.fmtDur(acc[code]), accessSrc: acc.src,
         flightNo: f[0], dep: f[1], arr: f[2], slack: this.fmtDur(this.toMin(f[1]) - atAirport),
+        flightSrc: `${fare ? `일반석 ${fare.toLocaleString('ko-KR')}원 · ` : ''}${fare ? '국토교통부 TAGO' : '한국공항공사'} · ${stale ? `${days}일 전 확인 · 항공사에서 다시 확인하세요` : '9/25 확인'}`,
+        flightSrcColor: stale ? '#9a5a1e' : '#9a9087',
         totalMin: this.toMin(f[2]) - start, mode: this.mode() });
     });
     rows.sort((x, y) => x.totalMin - y.totalMin);
     return {
       rows: rows.map((r, i) => ({ ...r, total: this.fmtDur(r.totalMin), rank: i === 0 ? '가장 빠름' : `${i + 1}순위`,
         rankColor: i === 0 ? '#2f62c4' : '#7a7067', border: i === 0 ? '2px solid #2f62c4' : '1px solid #ece3d8' })),
-      noRoute: missing.length ? `${missing.join('·')} → ${dest} 노선은 운항 스케줄 DB에 없어 제외했어요.` : ''
+      noRoute: [
+        missing.length ? `${missing.join('·')} → ${dest}은(는) 그날 운항 스케줄 DB에 편이 없어 제외했어요.` : '',
+        noFlight.length ? `${noFlight.join('·')}에서는 14:30에 출발해 탈 수 있는 편이 없어요.` : ''
+      ].filter(Boolean).join('\n'),
+      noAccess: noAccess.length ? `${this.mode()}로 ${noAccess.join('·')}까지 가는 시간 데이터가 아직 없어요. 차량으로 바꿔 보시거나, 실측(ODsay)이 끝난 뒤 다시 확인해 주세요.` : '',
+      hasRows: rows.length > 0
     };
   }
 
@@ -379,6 +397,7 @@ class Component extends DCLogic {
       ...m, bot: m.role === 'bot', user: m.role === 'user', text: m.pending ? '' : m.text,
       showSrc: showSrc && m.role === 'bot', srcColor: m.ai ? '#8a4fb0' : '#8a8077',
       rows: m.kind === 'results' && res ? res.rows : null, noRoute: m.kind === 'results' && res ? res.noRoute : '',
+      noAccess: m.kind === 'results' && res ? res.noAccess : '', showMeLink: m.kind === 'results' && res ? res.hasRows : false,
       rowsTitle: `${a.dest}행 · 총 소요시간 순 · ${this.mode()}`,
       onSend: () => this.callAI('free', m.pending, m.id),
       onCancel: () => this.setState(s => ({ msgs: s.msgs.filter(x => x.id !== m.id) }))

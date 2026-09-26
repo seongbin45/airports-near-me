@@ -143,6 +143,72 @@ input::placeholder{color:#b0a598}
 
           <sc-if value="{{ showClasses }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <div style="flex:none;width:36px;height:36px;border-radius:11px;background:#fbe3dc;color:#c0392b;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">E</div>
+                  <div style="flex:1;min-width:180px;display:flex;flex-direction:column;gap:2px">
+                    <div style="font-size:14px;font-weight:700">에브리타임 시간표 불러오기</div>
+                    <div style="font-size:12px;color:#7a7067;line-height:1.5">공유 링크 하나로 과목·요일·시간을 한 번에 채워요.</div>
+                  </div>
+                  <sc-if value="{{ etClosed }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ etOpen }}" style="flex:none;min-height:44px;padding:0 16px;border-radius:22px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ etOpenLabel }}</button>
+                  </sc-if>
+                </div>
+
+                <sc-if value="{{ etShowForm }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:12px">
+                    <div style="display:flex;flex-direction:column;background:#faf6f0;border-radius:12px">
+                      <sc-for list="{{ etGuide }}" as="g" hint-placeholder-count="4">
+                        <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-top:{{ g.divider }}">
+                          <div style="flex:none;width:20px;height:20px;border-radius:50%;background:#e8eefa;color:#2f62c4;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ g.n }}</div>
+                          <div style="font-size:13px;line-height:1.5;text-wrap:pretty">{{ g.text }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      <input value="{{ etUrl }}" onChange="{{ onEtUrl }}" inputMode="url" placeholder="https://everytime.kr/@..." style="flex:1;min-width:200px;min-height:48px;padding:0 14px;border-radius:14px;border:1px solid {{ etInputBorder }};background:#fffdfa;font:inherit;font-size:15px;color:#2b2622;outline:none">
+                      <button onClick="{{ etPaste }}" style="flex:none;min-height:48px;padding:0 14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;color:#5d544c;font:inherit;font-size:13px;font-weight:600;cursor:pointer">붙여넣기</button>
+                      <button onClick="{{ etFetch }}" disabled="{{ etFetchDisabled }}" style="flex:none;min-height:48px;padding:0 18px;border-radius:14px;border:none;background:{{ etFetchBg }};color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer">{{ etFetchLabel }}</button>
+                    </div>
+                    <sc-if value="{{ etMsg }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:12px;line-height:1.5;color:{{ etMsgColor }};text-wrap:pretty">{{ etMsg }}</div>
+                    </sc-if>
+                    <div style="font-size:11px;line-height:1.5;color:#9a9087;text-wrap:pretty">링크의 공개 시간표만 한 번 읽고, 링크와 원본 페이지는 저장하지 않아요. 에브리타임 계정 로그인은 필요 없어요.</div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ etShowPreview }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:10px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                      <div style="font-size:13px;font-weight:600;color:#5d544c;flex:1;min-width:0">{{ etSemester }} · {{ etPickCount }}과목 선택</div>
+                      <div style="flex:none;font-size:11px;color:#9a5a1e;background:#fbeedd;padding:3px 8px;border-radius:8px">화면용 샘플 데이터</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;border:1px solid #ece3d8;border-radius:12px">
+                      <sc-for list="{{ etItems }}" as="it" hint-placeholder-count="5">
+                        <button onClick="{{ it.onToggle }}" style="display:flex;gap:12px;align-items:center;padding:10px 12px;border:none;border-top:{{ it.divider }};background:transparent;font:inherit;text-align:left;cursor:pointer;color:#2b2622">
+                          <div style="flex:none;width:22px;height:22px;border-radius:7px;border:{{ it.boxBorder }};background:{{ it.boxBg }};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ it.mark }}</div>
+                          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                            <div style="font-size:14px;font-weight:600">{{ it.name }}</div>
+                            <div style="font-size:12px;color:#7a7067;font-variant-numeric:tabular-nums">{{ it.when }}{{ it.placeNote }}</div>
+                            <sc-if value="{{ it.note }}" hint-placeholder-val="{{ false }}">
+                              <div style="font-size:11px;color:{{ it.noteColor }}">{{ it.note }}</div>
+                            </sc-if>
+                          </div>
+                        </button>
+                      </sc-for>
+                    </div>
+                    <div style="display:flex;gap:8px">
+                      <button onClick="{{ etCancel }}" style="flex:none;min-height:48px;padding:0 18px;border-radius:24px;border:1px solid #e2d8cc;background:#fffdfa;color:#5d544c;font:inherit;font-size:14px;font-weight:600;cursor:pointer">취소</button>
+                      <button onClick="{{ etApply }}" disabled="{{ etApplyDisabled }}" style="flex:1;min-height:48px;border-radius:24px;border:none;background:{{ etApplyBg }};color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer">{{ etApplyLabel }}</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ etDone }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:13px;color:#2d6a3a;line-height:1.5">{{ etDoneMsg }}</div>
+                </sc-if>
+              </div>
+
               <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:12px;overflow-x:auto">
                 <div style="display:grid;grid-template-columns:40px repeat(5,minmax(52px,1fr));gap:6px 4px;min-width:320px">
                   <div></div>
@@ -326,7 +392,7 @@ input::placeholder{color:#b0a598}
                   </div>
                 </sc-for>
               </div>
-              <div style="font-size:13px;line-height:1.5;color:#5d544c;text-wrap:pretty">방문 이유는 파일에 없어요. 대화에서 공항 방문 7회의 이유를 하나씩 여쭤볼게요.</div>
+              <div style="font-size:13px;line-height:1.5;color:#5d544c;text-wrap:pretty">2024.09.14 ~ 2026.09.20 기록이에요. 방문 이유는 파일에 없어요. 대화에서 공항 방문 7회의 이유를 하나씩 여쭤볼게요.</div>
             </div>
           </sc-if>
           <button onClick="{{ toggleConsent }}" style="display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;text-align:left;cursor:pointer;color:#2b2622">
@@ -401,7 +467,47 @@ class Component extends DCLogic {
     cf: { id: null, name: '', place: '', days: [], start: '', end: '' }, cfNote: '',
     events: [{ id: 5, kind: '회의', date: '2026-10-02', start: '13:00', end: '14:30', allDay: false, desc: '캡스톤 팀 회의', src: '직접 입력' }],
     ef: { kind: '약속', date: '', start: '', end: '', allDay: false, desc: '' }, efTouched: false, imported: false,
-    os: 'android', uploaded: false, consent: false, skipped: {} };
+    os: 'android', uploaded: false, consent: false, skipped: {},
+    et: { mode: 'closed', url: '', msg: '', msgKind: '', items: [], pick: {}, done: '' } };
+
+  ET_SAMPLE = [
+    { name: '운영체제', place: '공학관 301', days: ['월', '수'], start: '09:00', end: '10:15' },
+    { name: '데이터베이스', place: '공학관 204', days: ['화', '목'], start: '13:00', end: '14:15' },
+    { name: '컴퓨터네트워크', place: '공학관 405', days: ['화', '목'], start: '10:30', end: '11:45' },
+    { name: '캡스톤디자인', place: '', days: ['금'], start: '10:30', end: '12:45' },
+    { name: '대학영어', place: '인문관 112', days: ['월'], start: '15:00', end: '16:50' },
+    { name: '온라인 교양: 미술의 이해', place: '', days: [], start: '', end: '' }
+  ];
+
+  setEt(p) { this.setState(s => ({ et: { ...s.et, ...p } })); }
+  etUrlOk(u) { return /^(https?:\/\/)?(www\.)?everytime\.kr\/@[A-Za-z0-9]{8,}\/?$/.test(u.trim()); }
+  etFetch() {
+    const u = this.state.et.url.trim();
+    if (!this.etUrlOk(u)) return this.setEt({ msg: 'everytime.kr/@ 로 시작하는 시간표 공유 링크를 넣어주세요.', msgKind: 'error' });
+    this.setEt({ mode: 'loading', msg: '', msgKind: '' });
+    clearTimeout(this.etT);
+    this.etT = setTimeout(() => {
+      if (/private|비공개/i.test(u)) return this.setEt({ mode: 'form', msg: '시간표가 비공개예요. 에브리타임에서 공개 범위를 "전체 공개"로 바꾼 뒤 다시 시도해 주세요.', msgKind: 'error' });
+      const cls = this.state.classes, pick = {};
+      const items = this.ET_SAMPLE.map((c, i) => {
+        const online = !c.days.length;
+        const dup = !online && cls.some(x => x.name === c.name && x.start === c.start && x.days.join() === c.days.join());
+        const clash = !online && !dup && cls.find(x => x.days.some(d => c.days.includes(d)) && this.mins(x.start) < this.mins(c.end) && this.mins(c.start) < this.mins(x.end));
+        pick[i] = !online && !dup;
+        return { ...c, online, dup, clash: clash ? clash.name : '' };
+      });
+      this.setEt({ mode: 'preview', items, pick });
+    }, 900);
+  }
+  etApply() {
+    this.setState(st => {
+      const add = st.et.items.filter((c, i) => st.et.pick[i] && !c.online);
+      let nid = st.nid;
+      const classes = [...st.classes, ...add.map(c => ({ id: nid++, name: c.name, place: c.place, days: c.days, start: c.start, end: c.end }))];
+      return { classes, nid, et: { ...st.et, mode: 'closed', items: [], pick: {}, url: '', done: `에브리타임에서 ${add.length}과목을 시간표에 넣었어요. 블록을 눌러 고칠 수 있어요.` } };
+    });
+  }
+  componentWillUnmount() { clearTimeout(this.etT); }
 
   steps = ['country', 'home', 'type', 'schedule', 'history', 'done'];
 
@@ -441,7 +547,7 @@ class Component extends DCLogic {
     const region = REGIONS.find(r => r.short === s.sido);
     const sggObj = region && region.sggs.find(x => x.name === s.sgg);
     const homeDone = region && (!region.sggs.length || (sggObj && (!sggObj.gus.length || s.gu)));
-    const homeLabel = region ? [region.full, s.sgg, s.gu].filter(Boolean).join(' ') + (s.addr ? ' ' + s.addr : '') : '시·도를 골라주세요';
+    const homeLabel = homeDone ? [region.full, s.sgg, s.gu].filter(Boolean).join(' ') + (s.addr.trim() ? ' ' + s.addr.trim() : '') : region ? '시·군·구를 골라주세요' : '시·도를 골라주세요';
 
     const q = s.q.trim();
     let qResults = [];
@@ -500,7 +606,7 @@ class Component extends DCLogic {
     const summary = [
       { k: '국가', v: '대한민국' }, { k: '거주지', v: homeLabel }, { k: '유형', v: s.type || '-' },
       { k: '수업 시간표', v: isStudent ? `${s.classes.length}과목 · 주 ${Math.round(weekMin / 6) / 10}시간` : '해당 없음' },
-      { k: '일정', v: `${s.events.length}개` }, { k: '방문 기록', v: s.uploaded ? '공항 방문 7회 · 방문지 142곳' : '나중에 가져오기' }
+      { k: '일정', v: `${s.events.length}개` }, { k: '방문 기록', v: s.uploaded ? '방문지 142곳 · 공항 방문 7회' : '나중에 가져오기' }
     ].map((f, i) => ({ ...f, divider: i ? '1px solid #f1eae1' : 'none' }));
 
     return {
@@ -530,6 +636,37 @@ class Component extends DCLogic {
       onImport: () => this.setState(st => ({ imported: true, tab: 'events', events: [...st.events,
         { id: st.nid, kind: '시험', date: '2026-10-20', start: '10:00', end: '11:30', allDay: false, desc: '운영체제 중간고사', src: '구글 캘린더' },
         { id: st.nid + 1, kind: '약속', date: '2026-10-03', start: '', end: '', allDay: true, desc: '개천절 · 가족 모임', src: '구글 캘린더' }], nid: st.nid + 2 })),
+      ...(() => {
+        const et = s.et, mode = et.mode, urlOk = this.etUrlOk(et.url), loading = mode === 'loading';
+        const picks = et.items.filter((c, i) => et.pick[i] && !c.online).length;
+        return {
+          etClosed: mode === 'closed', etOpenLabel: et.done ? '다시 불러오기' : '링크로 불러오기',
+          etOpen: () => this.setEt({ mode: 'form', done: '', msg: '' }),
+          etShowForm: mode === 'form' || loading,
+          etGuide: ['에브리타임 앱에서 시간표 탭을 열어요.', '오른쪽 위 설정(톱니바퀴) → 공개 범위를 "전체 공개"로 바꿔요.', '공유 아이콘 → "URL 복사"를 눌러요.', '아래 칸에 붙여넣고 불러오기를 눌러요.']
+            .map((text, i) => ({ n: i + 1, text, divider: i ? '1px solid #efe7dc' : 'none' })),
+          etUrl: et.url, onEtUrl: e => this.setEt({ url: e.target.value, msg: '', msgKind: '' }),
+          etPaste: async () => { try { const t = await navigator.clipboard.readText(); this.setEt({ url: t.trim(), msg: '', msgKind: '' }); } catch (e) { this.setEt({ msg: '클립보드를 읽을 수 없어요. 칸을 길게 눌러 직접 붙여넣어 주세요.', msgKind: 'warn' }); } },
+          etInputBorder: et.msgKind === 'error' ? '#d99a86' : urlOk ? '#2f62c4' : '#e2d8cc',
+          etFetch: () => this.etFetch(), etFetchDisabled: loading || !et.url.trim(),
+          etFetchBg: loading || !et.url.trim() ? '#c9bfb3' : '#2f62c4', etFetchLabel: loading ? '읽는 중…' : '불러오기',
+          etMsg: et.msg, etMsgColor: et.msgKind === 'error' ? '#b0472a' : '#9a5a1e',
+          etShowPreview: mode === 'preview', etSemester: '2026년 2학기', etPickCount: picks,
+          etItems: et.items.map((c, i) => {
+            const on = !!et.pick[i] && !c.online;
+            return { name: c.name, divider: i ? '1px solid #f1eae1' : 'none',
+              when: c.online ? '시간 없음 (온라인 강의)' : `${c.days.join('·')} ${c.start}–${c.end}`, placeNote: c.place ? ` · ${c.place}` : '',
+              note: c.online ? '시간이 없는 과목은 출발 시각 계산에 쓰지 않아 뺐어요.' : c.dup ? '이미 시간표에 있어요.' : c.clash ? `${c.clash}과 시간이 겹쳐요.` : '',
+              noteColor: c.clash ? '#9a5a1e' : '#9a9087',
+              mark: on ? '✓' : '', boxBorder: on ? 'none' : '1.5px solid #cdbfae', boxBg: on ? '#2f62c4' : c.online ? '#f1ebe2' : '#fffdfa',
+              onToggle: () => !c.online && this.setState(st => ({ et: { ...st.et, pick: { ...st.et.pick, [i]: !st.et.pick[i] } } })) };
+          }),
+          etCancel: () => this.setEt({ mode: 'form', items: [], pick: {} }),
+          etApply: () => this.etApply(), etApplyDisabled: !picks, etApplyBg: picks ? '#2f62c4' : '#c9bfb3',
+          etApplyLabel: picks ? `${picks}과목 시간표에 추가` : '추가할 과목을 골라주세요',
+          etDone: !!et.done && mode === 'closed', etDoneMsg: et.done
+        };
+      })(),
       showTabs: isStudent,
       schedTabs: [['classes', `수업 시간표 ${s.classes.length}`], ['events', `다가오는 일정 ${s.events.length}`]].map(([id, label]) => ({ label, onClick: () => set({ tab: id }), bg: tab === id ? '#fffdfa' : 'transparent', shadow: tab === id ? '0 1px 3px rgba(60,40,20,.12)' : 'none' })),
       showClasses: tab === 'classes', showEvents: tab === 'events',
@@ -570,7 +707,7 @@ class Component extends DCLogic {
       osTabs: [['android', '안드로이드'], ['ios', '아이폰']].map(([id, label]) => ({ label, onClick: () => set({ os: id }), bg: s.os === id ? '#fffdfa' : 'transparent', shadow: s.os === id ? '0 1px 3px rgba(60,40,20,.12)' : 'none' })),
       osSteps: OS[s.os].map((text, i) => ({ n: i + 1, text, divider: i ? '1px solid #f1eae1' : 'none' })),
       notUploaded: !s.uploaded, uploaded: s.uploaded, onUpload: () => set({ uploaded: true }),
-      parsed: [{ v: '142', k: '방문지' }, { v: '7', k: '공항 방문' }, { v: '3', k: '자주 간 도시' }],
+      parsed: [{ v: '142', k: '방문지' }, { v: '7', k: '공항 방문' }, { v: '3', k: '다녀간 공항' }],
       toggleConsent: () => set({ consent: !s.consent }), consentMark: s.consent ? '✓' : '',
       consentBorder: s.consent ? 'none' : '1.5px solid #cdbfae', consentBg: s.consent ? '#2f62c4' : '#fffdfa',
       summary,

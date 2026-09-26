@@ -54,7 +54,7 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
             </sc-for>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <div style="font-size:13px;font-weight:600;color:#5d544c">자주 이용하는 공항 <span style="font-weight:400;color:#9a9087">거주지 기준 · 카카오모빌리티 / ODsay</span></div>
+            <div style="font-size:13px;font-weight:600;color:#5d544c">가까운 공항 <span style="font-weight:400;color:#9a9087">거주지 기준 · 카카오모빌리티 / ODsay</span></div>
             <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px">
               <sc-for list="{{ airports }}" as="a" hint-placeholder-count="3">
                 <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:{{ a.divider }}">
@@ -74,8 +74,41 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
       <sc-if value="{{ isTrips }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;flex-direction:column;gap:12px">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-            <div style="flex:1;min-width:0;font-size:13px;color:#5d544c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">공항 방문 {{ tripCount }}회 · 이유 입력 {{ tripReasoned }}회</div>
+            <div style="flex:1;min-width:0;font-size:13px;color:#5d544c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">공항 방문 {{ tripCount }}회 · 이유 입력 {{ tripReasoned }}회{{ pendingNote }}</div>
             <div style="flex:none;font-size:11px;color:#9a5a1e;background:#fbeedd;padding:3px 8px;border-radius:8px">화면용 샘플 데이터</div>
+          </div>
+          <sc-if value="{{ hasPending }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="font-size:13px;line-height:1.5;color:#5d544c;text-wrap:pretty">다녀오신 여정이 있는데 아직 기록으로 남기지 않았어요. 확인하면 다음 추천에서 지난 방문으로 써요.</div>
+              <sc-for list="{{ pending }}" as="t" hint-placeholder-count="2">
+                <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700">
+                      <div>{{ t.from }}</div><div style="color:#9a9087;font-weight:400">→</div><div>{{ t.to }}</div>
+                    </div>
+                    <div style="flex:none;font-size:12px;color:#7a7067;font-variant-numeric:tabular-nums">{{ t.date }}</div>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <sc-if value="{{ t.reason }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:12px;font-weight:600;color:#5d544c;background:#f3ece3;padding:3px 10px;border-radius:10px">{{ t.reason }}</div>
+                    </sc-if>
+                    <div style="font-size:11px;color:#9a9087">{{ t.src }}</div>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <button onClick="{{ t.onConfirm }}" style="flex:1;min-height:44px;border-radius:22px;border:none;background:#2f62c4;color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer">다녀왔어요</button>
+                    <button onClick="{{ t.onDismiss }}" style="flex:1;min-height:44px;border-radius:22px;border:1px solid #e2d8cc;background:#fffdfa;color:#5d544c;font:inherit;font-size:13px;font-weight:600;cursor:pointer">안 갔어요</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:13px;font-weight:600;color:#5d544c">구글 타임라인 가져오기</div>
+            <div style="font-size:12px;line-height:1.5;color:#7a7067;text-wrap:pretty">휴대폰에서 내보낸 Timeline.json을 올리면 공항에 다녀온 여정을 찾아 확인 대기에 넣어요. 파일은 브라우저 안에서만 읽고, 서버에는 찾아낸 여정만 보내요.</div>
+            <button onClick="{{ onImport }}" disabled="{{ imported }}" style="align-self:flex-start;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:13px;font-weight:600;cursor:pointer">파일 선택</button>
+            <sc-if value="{{ importMsg }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:12px;line-height:1.5;color:#5d544c;text-wrap:pretty">{{ importMsg }}</div>
+            </sc-if>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
@@ -132,7 +165,7 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
                   <div style="font-size:14px;font-weight:600">{{ c.ask }}</div>
                   <div style="flex:none;font-size:11px;font-weight:600;color:{{ c.ink }};background:{{ c.bg }};padding:3px 8px;border-radius:8px">{{ c.status }}</div>
                 </div>
-                <div style="font-size:12px;color:#7a7067;font-variant-numeric:tabular-nums">{{ c.when }} · {{ c.detail }}</div>
+                <div style="font-size:12px;color:#7a7067;font-variant-numeric:tabular-nums;line-height:1.5">{{ c.when }} · {{ c.model }} · {{ c.detail }}</div>
               </div>
             </sc-for>
           </div>
@@ -143,7 +176,7 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
         <div style="display:flex;flex-direction:column;gap:14px">
           <div style="display:flex;flex-direction:column;background:#fffdfa;border:1px solid #ece3d8;border-radius:16px">
             <sc-for list="{{ consents }}" as="c" hint-placeholder-count="3">
-              <button onClick="{{ c.onClick }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:none;border-top:{{ c.divider }};background:transparent;font:inherit;text-align:left;cursor:pointer;color:#2b2622">
+              <button onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:none;border-top:{{ c.divider }};background:transparent;font:inherit;text-align:left;cursor:{{ c.cursor }};color:#2b2622;opacity:{{ c.opacity }}">
                 <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
                   <div style="font-size:14px;font-weight:600">{{ c.label }}</div>
                   <div style="font-size:12px;color:#7a7067;line-height:1.5">{{ c.note }}</div>
@@ -155,11 +188,23 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
             </sc-for>
           </div>
           <sc-if value="{{ consentWarn }}" hint-placeholder-val="{{ false }}">
-            <div style="font-size:13px;color:#9a5a1e;line-height:1.5;background:#fbeedd;border-radius:12px;padding:10px 14px">위치정보 동의를 끄면 방문 기록 {{ tripCount }}건이 바로 삭제되고, 추천은 거주지 기준으로만 계산돼요. 스위치를 한 번 더 누르면 확정돼요.</div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:#9a5a1e;line-height:1.5;background:#fbeedd;border-radius:12px;padding:10px 14px">
+              <div>위치정보 동의를 끄면 방문 기록 {{ tripCount }}건이 바로 삭제되고, 추천은 거주지 기준으로만 계산돼요. 스위치를 한 번 더 누르면 확정돼요.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onClick="{{ onRevoke }}" style="min-height:40px;padding:0 16px;border-radius:20px;border:none;background:#b0472a;color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer">동의 철회하고 삭제</button>
+                <button onClick="{{ onCancelRevoke }}" style="min-height:40px;padding:0 16px;border-radius:20px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:13px;cursor:pointer">취소</button>
+              </div>
+            </div>
           </sc-if>
           <div style="display:flex;flex-direction:column;gap:8px">
             <button onClick="{{ onExport }}" style="min-height:48px;border-radius:24px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ exportLabel }}</button>
-            <button onClick="{{ onDeleteAll }}" style="min-height:48px;border-radius:24px;border:1px solid #e9c9bd;background:#fffdfa;color:#b0472a;font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ deleteLabel }}</button>
+            <button onClick="{{ onDeleteAll }}" style="min-height:48px;padding:0 16px;border-radius:24px;border:1px solid #e9c9bd;background:#fffdfa;color:#b0472a;font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ deleteLabel }}</button>
+            <sc-if value="{{ confirmDel }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ onCancelDel }}" style="min-height:40px;border:none;background:transparent;color:#7a7067;font:inherit;font-size:13px;cursor:pointer">취소</button>
+            </sc-if>
+            <sc-if value="{{ revoked }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:13px;color:#5d544c;text-align:center">위치정보 동의를 철회하고 방문 기록을 삭제했어요.</div>
+            </sc-if>
           </div>
         </div>
       </sc-if>
@@ -171,6 +216,11 @@ a{color:#2f62c4}a:hover{color:#1f4a9c}
 const PURPOSES = ['고향 방문', '현장 강의', '네트워킹', '출장', '여행'];
 class Component extends DCLogic {
   state = { tab: 'basic', filter: '전체', consent: { loc: true, cal: false, ai: true }, exported: false, confirmDel: false,
+    confirmRevoke: false, revoked: false, imported: false, importMsg: '',
+    pending: [
+      { id: 'p1', kind: 'trip', from: 'GMP', to: '부산', date: '2026-09-19', reason: '네트워킹', src: '대화에서' },
+      { id: 'p2', kind: 'file', from: 'CJJ', to: '제주', date: '2026-05-03', reason: null, src: '파일에서 · Timeline.json' }
+    ],
     trips: [
       { id: 1, from: 'CJJ', to: 'CJU', date: '2026-09-26', purpose: '고향 방문', detail: '추석 연휴 · 서귀포 본가', links: ['일정: 추석 연휴', '방문지: 서귀포시'], src: 'Timeline.json + 대화에서 확인' },
       { id: 2, from: 'GMP', to: 'PUS', date: '2026-08-21', purpose: '네트워킹', detail: '부산 스타트업 밋업', links: ['일정: 8/21 밋업'], src: 'Timeline.json + 캘린더' },
@@ -178,12 +228,13 @@ class Component extends DCLogic {
       { id: 4, from: 'CJJ', to: 'CJU', date: '2026-02-14', purpose: '고향 방문', detail: '설 연휴', links: ['일정: 설 연휴'], src: 'Timeline.json + 대화에서 확인' },
       { id: 5, from: 'GMP', to: 'KWJ', date: '2025-11-08', purpose: '현장 강의', detail: '광주 AI 세미나 수강', links: ['일정: 11/8 세미나'], src: '대화에서 입력' }
     ] };
+  revoke() { this.setState(st => ({ consent: { ...st.consent, loc: false }, confirmRevoke: false, revoked: true, trips: [], pending: [] })); }
   renderVals() {
     const s = this.state, set = p => this.setState(p);
     const fmt = d => { const [y, m, dd] = d.split('-'); return `${y}.${m}.${dd}`; };
     const trips = s.trips.filter(t => s.filter === '전체' || (s.filter === '이유 미입력' ? !t.purpose : t.purpose === s.filter));
     const consentRows = [
-      ['loc', '위치정보 수집·이용 (필수)', '방문 기록으로 공항 추천 정확도를 높여요.'],
+      ['loc', '위치정보 수집·이용', '방문 기록으로 공항 추천 정확도를 높여요.'],
       ['cal', '캘린더 연결 (준비 중)', '구글 캘린더 일정을 읽기 전용으로 불러올 예정이에요.'],
       ['ai', 'AI 문장 다듬기', '끄면 DB 결과를 표 그대로만 보여드려요.']
     ];
@@ -197,21 +248,42 @@ class Component extends DCLogic {
         { k: '수업', v: '3과목 · 주 7.8시간', note: '월·수 오전, 화·목 오후, 금 오전', editVis: 'visible' },
         { k: '일정', v: '4개', note: '직접 입력 2 · 구글 캘린더 2', editVis: 'visible' }
       ].map((f, i) => ({ ...f, divider: i ? '1px solid #f1eae1' : 'none' })),
-      airports: [['CJJ', '청주국제공항', '자동차 58분', '대중교통 1시간 42분'], ['GMP', '김포국제공항', '자동차 1시간 5분', '대중교통 1시간 28분'], ['ICN', '인천국제공항', '자동차 1시간 15분', '공항버스 1시간 30분']]
+      airports: [['GMP', '김포국제공항', '자동차 55분', '대중교통 -'], ['CJJ', '청주국제공항', '자동차 1시간 20분', '대중교통 -'], ['ICN', '인천국제공항', '자동차 1시간 35분', '대중교통 -']]
         .map(([code, name, car, transit], i) => ({ code, name, car, transit, divider: i ? '1px solid #f1eae1' : 'none' })),
       tripCount: s.trips.length, tripReasoned: s.trips.filter(t => t.purpose).length,
+      pendingNote: s.pending.length ? ` · 확인 대기 ${s.pending.length}건` : '',
+      hasPending: s.pending.length > 0,
+      pending: s.pending.map(t => ({ ...t, date: fmt(t.date),
+        onConfirm: () => this.setState(st => ({ pending: st.pending.filter(x => x.id !== t.id),
+          trips: [{ id: Date.now(), from: t.from, to: t.to, date: t.date, purpose: t.reason, detail: '', links: [], src: t.kind === 'trip' ? '대화에서 확인' : 'Timeline.json' }, ...st.trips].sort((a, b) => b.date.localeCompare(a.date)) })),
+        onDismiss: () => this.setState(st => ({ pending: st.pending.filter(x => x.id !== t.id) })) })),
+      imported: s.imported, importMsg: s.importMsg,
+      onImport: () => this.setState(st => ({ imported: true,
+        importMsg: '여정 3건을 찾았고 1건을 확인 대기에 넣었어요. 이미 기록된 2건은 뺐어요. 아래에서 확인해 주세요.',
+        pending: [...st.pending, { id: 'p3', kind: 'file', from: 'GMP', to: '제주', date: '2026-03-28', reason: null, src: '파일에서 · Timeline.json' }] })),
       filters: ['전체', '이유 미입력', ...PURPOSES.slice(0, 3)].map(f => { const on = s.filter === f; return { label: f, onClick: () => set({ filter: f }), border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#2b2622' }; }),
       trips: trips.map(t => ({ ...t, date: fmt(t.date), hasReason: !!t.purpose, noReason: !t.purpose,
         chips: PURPOSES.map(p => ({ label: p, onClick: () => this.setState(st => ({ trips: st.trips.map(x => x.id === t.id ? { ...x, purpose: p, detail: '', src: x.src + ' + 직접 입력' } : x) })) })),
         onRemove: () => this.setState(st => ({ trips: st.trips.filter(x => x.id !== t.id) })) })),
       aiCalls: [
-        { ask: '추석 연휴 제주행 추천 설명', when: '09.24 21:12', status: '검증 통과', detail: '편명 3개 · 시각 6개 DB와 일치' },
-        { ask: '청주 vs 김포 비교 요약', when: '09.24 21:05', status: '검증 통과', detail: '편명 2개 · 시각 4개 DB와 일치' },
-        { ask: '부산행 오후 편 설명', when: '08.19 18:40', status: '표시 안 함', detail: '시각 1개 불일치(14:35 → DB 14:50) · 표로 대체' }
+        { ask: '제주 09.26 추천 요약', when: '09.24 21:12', model: 'Anthropic · claude-opus-5', status: '검증 통과', detail: '편명 3개 · 시각 6개 DB와 일치' },
+        { ask: '청주 vs 김포 비교해줘', when: '09.24 21:05', model: 'Anthropic · claude-opus-5 → 대체 모델', status: '검증 통과', detail: '편명 2개 · 시각 4개 DB와 일치' },
+        { ask: '부산 09.19 추천 요약', when: '09.18 18:40', model: 'Anthropic · claude-opus-5', status: '표시 안 함', detail: '불일치 14:35 · 표로 대체' },
+        { ask: '그날 부산 날씨 어때?', when: '09.18 18:42', model: 'Anthropic · claude-opus-5', status: '표시 안 함', detail: '불일치 날씨 · 표로 대체' }
       ].map((c, i) => ({ ...c, divider: i ? '1px solid #f1eae1' : 'none', bg: c.status === '검증 통과' ? '#e0efe0' : '#fbeedd', ink: c.status === '검증 통과' ? '#2d6a3a' : '#9a5a1e' })),
-      consents: consentRows.map(([id, label, note], i) => { const on = s.consent[id]; return { label, note, divider: i ? '1px solid #f1eae1' : 'none',
-        track: on ? '#2f62c4' : '#d8cec2', knob: on ? '19px' : '3px', onClick: () => this.setState(st => ({ consent: { ...st.consent, [id]: !st.consent[id] } })) }; }),
-      consentWarn: !s.consent.loc,
+      consents: consentRows.map(([id, label, note], i) => { const on = s.consent[id], disabled = id === 'cal'; return { label, note, disabled, divider: i ? '1px solid #f1eae1' : 'none',
+        opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : 'pointer',
+        track: on ? '#2f62c4' : '#d8cec2', knob: on ? '19px' : '3px',
+        onClick: () => {
+          if (disabled) return;
+          if (id !== 'loc') return this.setState(st => ({ consent: { ...st.consent, [id]: !st.consent[id] } }));
+          if (!on) return this.setState(st => ({ consent: { ...st.consent, loc: true }, revoked: false }));
+          if (s.confirmRevoke) return this.revoke();
+          this.setState({ confirmRevoke: true });
+        } }; }),
+      consentWarn: s.confirmRevoke,
+      onRevoke: () => this.revoke(), onCancelRevoke: () => set({ confirmRevoke: false }), revoked: s.revoked,
+      confirmDel: s.confirmDel, onCancelDel: () => set({ confirmDel: false }),
       exportLabel: s.exported ? 'my-data.json 파일을 내려받았어요' : '내 데이터 내려받기 (JSON)', onExport: () => set({ exported: true }),
       deleteLabel: s.confirmDel ? '한 번 더 누르면 계정과 모든 데이터가 삭제돼요' : '계정 삭제', onDeleteAll: () => set({ confirmDel: !s.confirmDel })
     };
