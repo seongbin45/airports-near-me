@@ -1,0 +1,69 @@
+# 브라우저 E2E — 테스트 전용 Supabase 프로젝트에서만 돈다.
+# 필수 검사가 아니다(main 보호는 ci.yml의 `check` 하나). 실패해도 머지를 막지 않지만, 결과는 PR에 남는다.
+#
+# 필요한 저장소 Secrets (E2E_ 접두사 — 운영 프로젝트 값과 절대 섞지 않는다):
+#   E2E_SUPABASE_URL, E2E_SUPABASE_PUBLISHABLE_KEY, E2E_SUPABASE_SERVICE_ROLE_KEY, E2E_PROJECT_REF,
+#   DEV_TEST_EMAIL, DEV_TEST_PASSWORD
+# DATA_GO_KR_KEY는 이 잡에 넣지 않는다 — 공공데이터포털 쿼터는 운영 야간 동기화·앱 런타임과 공유한다.
+#   (PR 단계에서도 같은 저장소 브랜치의 시크릿은 전달되므로, 키를 아예 두지 않는 편이 안전하다.)
+name: e2e
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# 테스트 프로젝트는 하나뿐인 공유 자원이다. e2e-data.yml과 같은 그룹으로 직렬화한다.
+concurrency:
+  group: e2e-db
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # NEXT_PUBLIC_*는 빌드 시점에 인라인된다 — build 단계에 반드시 있어야 한다.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.E2E_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      E2E_PROJECT_REF: ${{ secrets.E2E_PROJECT_REF }}
+      DEV_TEST_EMAIL: ${{ secrets.DEV_TEST_EMAIL }}
+      DEV_TEST_PASSWORD: ${{ secrets.DEV_TEST_PASSWORD }}
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # 채널을 지정하지 않으면 playwright가 받은 번들 Chromium을 쓴다 (러너에 msedge는 없다)
+      - run: npx playwright install --with-deps chromium
+      # 표식(e2e_marker)을 확인하고 계정을 처음 상태로 되돌린 뒤 검사 날짜를 고른다
+      - name: 테스트 DB 준비
+        run: npm run e2e:reset
+      - run: npm run build
+      # 서버를 백그라운드로 띄우면 스텝이 끝날 때 함께 죽을 수 있어, 기동·대기·검사를 한 스텝에서 처리한다
+      - name: 서버 기동과 E2E
+        run: |
+          set -e
+          npm run start > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000 >/dev/null; then break; fi
+            sleep 1
+          done
+          if ! curl -sf http://localhost:3000 >/dev/null; then
+            echo "서버가 60초 안에 뜨지 않았어요. server.log:"
+            cat server.log
+            exit 1
+          fi
+          npm run e2e
+      # 실패했을 때만 필요하다 — 스크린샷과 서버 로그를 함께 남긴다
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-failure
+          path: |
+            e2e-shots/
+            server.log
+          if-no-files-found: ignore

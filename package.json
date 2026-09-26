@@ -10,6 +10,8 @@
     "test": "vitest run",
     "sync": "tsx --env-file-if-exists=.env.local scripts/sync.mts",
     "doctor": "tsx --env-file-if-exists=.env.local scripts/doctor.mts",
+    "e2e": "node --env-file-if-exists=.env.local scripts/e2e.mjs",
+    "e2e:reset": "tsx --env-file-if-exists=.env.local scripts/e2e-reset.mts",
     "geocode-regions": "tsx --env-file-if-exists=.env.local scripts/geocode-regions.mts",
     "access-times": "tsx --env-file-if-exists=.env.local scripts/build-access-times.mts"
   },
@@ -30,7 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
-    "playwright-core": "^1.63.0",
+    "playwright": "^1.63.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",

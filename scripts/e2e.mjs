@@ -1,19 +1,42 @@
 // 로컬 E2E 확인: 로그인 → 가입 6단계 → 대화 → 추천 결과.
 // 준비: `npm run dev`, supabase/seed-dev.sql로 만든 테스트 계정(.env.local의 DEV_TEST_EMAIL/PASSWORD, 가입 전 상태).
-// 실행: node --env-file=.env.local scripts/e2e.mjs [출력폴더]
-import { chromium } from 'playwright-core';
-import { mkdirSync } from 'node:fs';
+// 실행: npm run e2e   (앞서 `npm run e2e:reset`으로 계정과 날짜를 준비한다)
+// 채널: 기본은 playwright가 받은 번들 Chromium. 설치된 브라우저를 쓰려면 E2E_CHANNEL=msedge.
+import { chromium } from 'playwright';
+import { mkdirSync, readFileSync } from 'node:fs';
 
 const BASE = process.env.E2E_BASE ?? 'http://localhost:3000';
 const OUT = process.argv[2] ?? 'e2e-shots';
-const CHANNEL = process.env.E2E_CHANNEL ?? 'msedge';
+// 채널을 지정하지 않으면 번들 Chromium을 쓴다 — 러너에는 msedge가 없다.
+const CHANNEL = process.env.E2E_CHANNEL;
 mkdirSync(OUT, { recursive: true });
+
+// 검사 날짜 — `npm run e2e:reset`이 운항 스케줄 공개 범위를 보고 골라 .e2e-date에 남긴다.
+// 파일이 없으면 오늘+2일(KST) 이후 첫 금요일을 계산해 쓰고, 그 사실을 경고로 남긴다(DB 범위는 확인하지 못한다).
+const isoDate = (() => {
+  try {
+    const t = readFileSync('.e2e-date', 'utf8').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  } catch { /* reset을 돌리지 않은 경우 */ }
+  if (process.env.E2E_DATE) return process.env.E2E_DATE;
+  const d = new Date(Date.now() + 9 * 3600_000);
+  d.setUTCDate(d.getUTCDate() + 2);
+  while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() + 1);
+  console.warn('⚠ .e2e-date가 없어 날짜를 계산해 씁니다. npm run e2e:reset을 먼저 돌리면 DB 공개 범위 안에서 고릅니다.');
+  return d.toISOString().slice(0, 10);
+})();
+const DATE_MD = `${Number(isoDate.slice(5, 7))}/${Number(isoDate.slice(8, 10))}`;
+
+// 이 화면이 어느 Supabase 프로젝트로 말을 거는지 기록한다 (테스트 프로젝트가 아니면 알려야 한다)
+const supaHost = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host; } catch { return null; } })();
+const hosts = new Set();
+const watchHosts = page => page.on('request', r => { try { hosts.add(new URL(r.url()).host); } catch { /* data: 등 */ } });
 
 const results = [];
 const check = (name, ok, extra = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? `  (${extra})` : ''}`); };
 const noHScroll = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
-const browser = await chromium.launch({ channel: CHANNEL });
+const browser = await chromium.launch(CHANNEL ? { channel: CHANNEL } : {});
 
 async function login(page) {
   await page.goto(BASE);
@@ -26,7 +49,7 @@ async function login(page) {
 async function chatFlow(page, tag) {
   await page.getByRole('button', { name: /^제주/ }).click();
   await page.getByText('제주 일정은 언제인가요?').waitFor();
-  await page.fill('form input', '10/2');
+  await page.fill('form input', DATE_MD);
   await page.press('form input', 'Enter');
   await page.getByText('마지막 일정이 14:30에 끝나요.').waitFor({ timeout: 15000 });
   check(`[${tag}] 일정 DB에서 출발 가능 시각 14:30 계산`, true);
@@ -36,7 +59,7 @@ async function chatFlow(page, tag) {
   await page.getByText('14:30 집 출발 기준 총 소요').first().waitFor({ timeout: 15000 });
   const cards = await page.getByText('14:30 집 출발 기준 총 소요').count();
   check(`[${tag}] 결과 카드 2개 이상`, cards >= 2, `${cards}개`);
-  // 10/2(금)은 TAGO 조회 범위(오늘~6일) 밖이라 한국공항공사 정기 스케줄이 쓰인다
+  // 앞당겨진 금요일(E2E_DATE)은 TAGO 조회 범위(오늘~6일) 밖이라 한국공항공사 정기 스케줄이 쓰인다
   check(`[${tag}] 실제 운항 스케줄 (한국공항공사 출처, 샘플 아님)`,
     (await page.getByText(/한국공항공사 · \d+\/\d+ 확인|국토교통부 TAGO · \d+\/\d+ 확인/).count()) === cards
       && (await page.getByText('화면용 샘플 데이터').count()) === 0);
@@ -49,6 +72,7 @@ async function chatFlow(page, tag) {
 {
   const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, locale: 'ko-KR' });
   const page = await ctx.newPage();
+  watchHosts(page);
   await login(page);
   await page.waitForURL('**/onboarding');
   await page.screenshot({ path: `${OUT}/m1-country.png` });
@@ -99,6 +123,11 @@ async function chatFlow(page, tag) {
 
   await chatFlow(page, '393×852');
   await page.screenshot({ path: `${OUT}/m7-chat-results.png` });
+
+  // 주소·키가 섞이면(운영 프로젝트를 가리키면) 여기서 드러난다
+  const supa = [...hosts].filter(h => h.endsWith('.supabase.co'));
+  check('[393×852] 데이터 요청이 테스트 프로젝트로만 감',
+    supa.length === 0 || !supaHost || supa.every(h => h === supaHost), supa.join(', ') || '기록 없음');
 
   await page.getByRole('button', { name: 'AI 요약 받기' }).click();
   const aiMsg = page.getByText(/쓸 수 있는 AI 제공자가 없어요|DB 대조 통과|DB와 맞지 않는 값|응답하지 않았어요/).first();

@@ -14,6 +14,9 @@
 | `app/api/{day,recommend,ai}` | 그날 일정 / 추천 계산 / AI 문장 (버튼으로만 호출) |
 | `lib/recommend.ts` | 출발 시각 + 공항까지 시간 → 40분 여유로 탈 수 있는 첫 편 → 총소요 순 |
 | `lib/ai/` | AI 호출(도구 없음, DB 결과만 전달)과 답변 속 편명·시각 DB 대조 |
+| `scripts/e2e.mjs` | 브라우저 E2E (`npm run e2e`) — 테스트 전용 Supabase 프로젝트에서만 돈다. 절차는 `docs/E2E.md` |
+| `scripts/doctor.mts` | 데이터 상태 게이트 (`npm run doctor`) |
+
 | `lib/data/` | 외부 데이터 어댑터 자리 (공공데이터포털 운항 스케줄, 카카오모빌리티, ODsay, 타임라인, 캘린더) |
 | `supabase/migrations/` | 스키마·시드 SQL. Supabase CLI로 연결됨(`supabase migration list`로 원격과 일치 확인, `supabase db push`로 적용) |
 
