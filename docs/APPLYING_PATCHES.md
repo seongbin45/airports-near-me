@@ -106,15 +106,27 @@ supabase db push
 - `Remote database is up to date.` → 새 마이그레이션 없음(정상)
 - `Applying migration ...` → 실제로 적용됨. 이때는 3-6까지 하고 앱도 한 번 열어 본다.
 
-### 3-6. push
+### 3-6. 반영 (push 또는 PR)
+
+**보호 규칙을 켜기 전**: `git push origin main`으로 끝난다.
+
+**보호 규칙을 켠 뒤**(PR 필수 + CI 통과 필수): main 직접 push가 거부된다.
+브랜치를 만들어 PR로 넣는다.
 
 ```powershell
-git push origin main
+git switch -c docs/patch-17            # 브랜치 이름은 자유
+git commit -m "..."                    # (패치를 적용했다면 이미 커밋돼 있다)
+git push -u origin docs/patch-17
+gh pr create --fill                    # 제목·본문을 커밋에서 채운다
+gh pr merge --auto --squash           # CI 통과하면 자동 머지 (설정: allow_auto_merge)
 ```
 
-**`--force`나 `--force-with-lease`를 쓰지 않는다.** 이유는 6장.
+- `--auto`는 **CI가 끝날 때까지 기다렸다가** 머지한다. 창을 닫아도 된다.
+- 바로 머지하려면 CI 통과를 확인한 뒤 `gh pr merge --squash`. 검사가 안 끝났으면 거부된다.
+- **`git am`으로 받은 패치는 이미 커밋이므로 새로 커밋할 필요가 없다** — 브랜치에 push만 하면 된다.
+- e2e 워크플로는 **필수 검사가 아니므로** 실패해도 머지는 막히지 않는다(처음엔 의도된 상태).
 
-거부되면(6장) 당황하지 말고 그대로 따라 한다.
+**`--force` / `--force-with-lease`를 main에 쓰지 않는다.** 이유는 6장.
 
 ## 4. 한 번에 여러 패치
 
@@ -140,7 +152,35 @@ git log --oneline -4
 **이미 push한 커밋은 되돌리려고 이력을 고치지 않는다.** `--force`로 지우면 이미 받아간 사람의
 저장소가 어긋나고, 그 사람이 다시 push하면 사라진 커밋이 되살아나 충돌한다. 새 커밋으로 정정한다.
 
-## 6. push — `--force-with-lease`를 일상적으로 쓰지 않는다
+## 6. push — 보호 적용 후의 흐름과 force 금지
+
+### 6.0 보호 규칙이 켜진 뒤 (2026-09-27 예정)
+
+- `git push origin main`은 **거부된다.** 브랜치 → PR → CI → 머지 흐름을 쓴다(3-6장).
+- 예외: **같은 SHA가 이미 다른 브랜치에서 검사를 통과했다면** main 직접 push가 받아들여진다.
+  이건 규칙 위반이 아니다 — 필수 검사는 "CI를 통과하지 않은 커밋"을 막는 장치다.
+  그래서 검증 기준은 "직접 push가 거부되나"가 아니라 **"CI 없이 main에 들어간 커밋이 없는가"**다.
+- `strict: false`라서 **각각 통과한 두 PR이 순차 머지된 뒤 합쳐서 깨질 수 있다.** 1인 레포라 수용한다.
+
+### 6.1 비상 해제
+
+상태 검사 이름이 보호 규칙의 `contexts`와 어긋나면(워크플로·job 이름을 바꿨을 때)
+PR이 영원히 이 상태로 멈춘다:
+
+```
+Expected — Waiting for status to be reported
+```
+
+**이 상태에서는 소유자도 통과할 수 없다.** 보호 규칙을 지우고 다시 설정한다.
+
+```powershell
+gh api -X DELETE repos/seongbin45/airports-near-me/branches/main/protection
+# 원인 수정(워크플로/job 이름 또는 contexts) 후 다시 PUT
+```
+
+그래서 **워크플로나 job 이름을 바꿀 때는 보호 규칙의 `contexts`도 함께 바꾼다.**
+
+### 6.2 force push
 
 `--force-with-lease`는 **원격 브랜치를 강제로 내 로컬 상태로 맞춘다.** 조건(내가 마지막으로 본
 상태에서 원격이 안 움직였는지)을 확인해 주지만, 통과하면 **원격에만 있던 커밋을 지운다.**
@@ -212,7 +252,8 @@ git check-ignore -v .\airports-near-me-16-예시.patch
 | 적용 확인 | `git show --stat HEAD` |
 | 검증 | `npm test` · `npm run build` |
 | DB 반영(마이그레이션 패치만) | `supabase db push` |
-| push | `git push origin main` |
+| 반영(보호 전) | `git push origin main` |
+| 반영(보호 후) | `git switch -c <브랜치>` → `git push -u origin <브랜치>` → `gh pr create --fill` → `gh pr merge --auto --squash` |
 | 거부됐을 때 | `git pull --rebase origin main` → `git push origin main` |
 | 적용 취소 | `git am --abort` |
 | 커밋 하나 되돌리기(로컬) | `git stash push -m wip` → `git reset --hard HEAD~1` → `git stash pop` |
@@ -231,5 +272,8 @@ git check-ignore -v .\airports-near-me-16-예시.patch
 | 13 | 시각대 배치 체크리스트 | 적용됨 (`0c6ec8c`) |
 | 14 | ODsay 인증 오류 파싱 수정 (커밋 2개) | 적용됨 (`d7eed60`, `fb05842`) |
 | 15 | 파이프라인·쿼터 문서 | 적용됨 (`4c52789`) |
+| 16 | 패치 적용 방법 문서 | 적용됨 (`4c52789` 다음) |
+| 17 | 커밋 경계 정정 + 브랜치/PR 흐름 | 이 패치 |
 
-**대기 중인 패치 없음.** 새 패치를 받으면 이 표의 다음 번호로 이어서 넣는다.
+**17 이후로는 브랜치 보호가 켜지면 main 직접 push 대신 PR 흐름을 쓴다(3-6장).**
+새 패치를 받으면 이 표의 다음 번호로 이어서 넣는다.

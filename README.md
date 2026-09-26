@@ -183,3 +183,27 @@ npm run doctor                                                              # �
 - 시각대 배치는 **출발 시각을 실제로 반영하는 제공자만** 쓴다(`supportsDepartureTime`). 실시간 전용 제공자(OSRM 등)의 값을 "평일 아침"으로 저장하면 시각대 컬럼이 거짓말을 하게 되기 때문이다.
 - 추천(`lib/server/trip.ts`)은 여정의 날짜·출발 시각으로 시각대를 정해(`bandFor`) 그 행을 쓰고, 없으면 `any`로 물러선다. 물러선 경우 화면이 그 사실을 보여준다(`accessBandMatched`).
 - 판단 함수는 `lib/data/access-bands.ts`의 순수 함수이고 테스트가 있다.
+
+
+## 기여 방법
+
+**main에는 CI를 통과하지 않은 커밋이 들어가지 않는다.** 브랜치 보호가 켜져 있어 `git push origin main`은
+거부되고(예외: 같은 SHA가 이미 다른 브랜치에서 검사를 통과한 경우), PR을 거쳐야 한다.
+
+```bash
+git switch -c <브랜치>          # 변경 작업
+git add <파일들>                # git add . 대신 파일 지정 (docs/COMMIT_BOUNDARIES.md)
+git commit -m "왜 바꿨는지"      # 한 커밋에 한 가지 변경
+git push -u origin <브랜치>
+gh pr create --fill             # 커밋에서 제목·본문 채움
+gh pr merge --auto --squash     # CI(ci.yml) 통과 후 자동 머지
+```
+
+- 필수 검사는 `ci.yml`의 **`check`** 하나다(린트·테스트·빌드). `e2e.yml`은 아직 필수 검사가 아니라
+  실패해도 머지가 막히지 않는다.
+- **워크플로나 job 이름을 바꾸면** 보호 규칙의 `contexts`도 함께 바꾼다. 어긋나면 PR이
+  `Expected — Waiting for status to be reported`로 멈추고 **소유자도 통과할 수 없다.**
+- 비상 해제: `gh api -X DELETE repos/seongbin45/airports-near-me/branches/main/protection` 후 재설정.
+- 이 레포에 적용하는 패치 파일을 받았다면 `docs/APPLYING_PATCHES.md`를 따른다.
+- 커밋 경계·이력 관리: `docs/COMMIT_BOUNDARIES.md` (2026-09-27 정정 — 자동 커밋 도구는 없었고,
+  원인은 `git add .` 습관이었다).
