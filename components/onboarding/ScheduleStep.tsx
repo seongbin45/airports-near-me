@@ -5,7 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkClass, checkEvent, DAYS, EVENT_KINDS, type ClassItem, type EventDraft, type EventKind } from '@/lib/onboarding/validate';
 import { layoutLanes } from '@/lib/onboarding/lanes';
 import { dateShortcuts, fmtDate, toMin } from '@/lib/time';
-import { CALENDAR_IMPORT_READY } from '@/lib/data/calendar-import';
+import { GOOGLE_CALENDAR_READY, ICS_IMPORT_READY } from '@/lib/data/calendar-import';
+import IcsImport from './IcsImport';
 import { inputCls, pill } from '@/components/ui';
 
 export interface EventItem extends EventDraft { id: number; source: string }
@@ -31,19 +32,31 @@ interface Props {
 export default function ScheduleStep({ supabase, isStudent, classes, setClasses, events, setEvents }: Props) {
   const [tab, setTab] = useState<'classes' | 'events'>(isStudent ? 'classes' : 'events');
   const shown = isStudent ? tab : 'events';
+  const [importing, setImporting] = useState(false);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3">
         <div className="flex min-w-[200px] flex-1 flex-col gap-0.5">
           <div className="text-sm font-semibold">캘린더에서 한 번에 불러오기</div>
-          <div className="text-xs leading-normal text-muted">구글·애플 캘린더 연결 또는 .ics 파일로 가져와요. 불러온 일정은 아래 목록에 표시돼요.</div>
+          <div className="text-xs leading-normal text-muted">캘린더 앱에서 내보낸 .ics 파일로 가져와요. 매주 반복은 수업 시간표로, 나머지는 일정으로 들어가요.</div>
         </div>
-        <button disabled={!CALENDAR_IMPORT_READY}
-          className="min-h-11 flex-none rounded-full border border-line-strong bg-surface px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:bg-[#f1ebe2] disabled:text-faint">
-          {CALENDAR_IMPORT_READY ? '캘린더 연결' : '준비 중'}
-        </button>
+        <div className="flex flex-none gap-1.5">
+          <button disabled={!ICS_IMPORT_READY} onClick={() => setImporting(v => !v)} aria-expanded={importing}
+            className="min-h-11 rounded-full border border-line-strong bg-surface px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:bg-[#f1ebe2] disabled:text-faint">
+            .ics 파일
+          </button>
+          <button disabled={!GOOGLE_CALENDAR_READY}
+            className="min-h-11 rounded-full border border-line-strong bg-surface px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:bg-[#f1ebe2] disabled:text-faint">
+            {GOOGLE_CALENDAR_READY ? '구글 캘린더' : '구글 캘린더 (준비 중)'}
+          </button>
+        </div>
       </div>
+
+      {importing && (
+        <IcsImport supabase={supabase} isStudent={isStudent} classes={classes} setClasses={setClasses}
+          events={events} setEvents={setEvents} onClose={() => setImporting(false)} />
+      )}
 
       {isStudent && (
         <div className="flex gap-1.5 self-start rounded-[14px] bg-sand p-1">
