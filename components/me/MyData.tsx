@@ -181,7 +181,8 @@ export default function MyData(p: Props) {
     setAi(!ai);
   }
   async function exportJson() {
-    const tables = ['profiles', 'class_timetable', 'schedules', 'visits', 'trips', 'ai_calls', 'location_consents'] as const;
+    // 사용자 데이터 테이블 전부 (visit_candidates: 타임라인 파일에서 온 확인 대기 후보)
+    const tables = ['profiles', 'class_timetable', 'schedules', 'visits', 'visit_candidates', 'trips', 'ai_calls', 'location_consents'] as const;
     const out: Record<string, unknown> = { exported_at: new Date().toISOString(), email: p.email };
     for (const t of tables) {
       const { data, error } = await supabase.from(t).select('*');
