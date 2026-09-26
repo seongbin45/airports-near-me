@@ -10,6 +10,7 @@
     "test": "vitest run",
     "sync": "tsx --env-file-if-exists=.env.local scripts/sync.mts",
     "doctor": "tsx --env-file-if-exists=.env.local scripts/doctor.mts",
+    "delete-dev-account": "tsx --env-file-if-exists=.env.local scripts/delete-dev-account.mts",
     "e2e": "node --env-file-if-exists=.env.local scripts/e2e.mjs",
     "e2e:reset": "tsx --env-file-if-exists=.env.local scripts/e2e-reset.mts",
     "geocode-regions": "tsx --env-file-if-exists=.env.local scripts/geocode-regions.mts",
