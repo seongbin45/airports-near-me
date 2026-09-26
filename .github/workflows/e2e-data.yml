@@ -57,6 +57,8 @@ jobs:
         run: npm run e2e:reset
       - run: npm run sync -- kac-full
       - run: npm run sync -- tago-horizon
+      # E2E 대화 흐름은 추천 카드를 확인한다 — 접근 시간이 없으면 계산할 수 없다(고정값을 넣는다)
+      - run: npm run e2e:seed
       # 동기화 뒤 상태를 남긴다 (실패해도 게이트는 돈다 — sync-flights.yml과 같은 이유)
       - name: 데이터 상태 점검
         if: always()

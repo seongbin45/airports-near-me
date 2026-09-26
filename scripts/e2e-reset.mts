@@ -14,6 +14,7 @@
 //             (선택) E2E_PROJECT_REF — 보조 확인용
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
+import { markerProblem } from '../lib/server/e2e-guard';
 
 const need = (k: string) => {
   const v = process.env[k];
@@ -33,9 +34,8 @@ const fail: (msg: string) => never = (msg) => { console.error(`중단: ${msg}`);
 // ── 1) 이 DB가 테스트 전용인지 증명한다 (가장 먼저, 그리고 조회 오류도 중단 사유로 본다)
 const marker = await admin.from('e2e_marker').select('note').eq('id', 1).maybeSingle();
 if (marker.error) fail(`e2e_marker를 확인할 수 없어요: ${marker.error.message} — 테스트 전용 프로젝트가 아니거나 스키마가 달라요.`);
-if (marker.data?.note !== 'e2e-test-project') {
-  fail(`e2e_marker의 note가 'e2e-test-project'가 아니에요(받은 값: ${JSON.stringify(marker.data?.note ?? null)}). 운영 DB에서는 이 표식이 없습니다.`);
-}
+const problem = markerProblem(marker.data?.note);
+if (problem) fail(problem);
 const ref = process.env.E2E_PROJECT_REF;
 if (ref && !url.includes(ref)) fail(`NEXT_PUBLIC_SUPABASE_URL에 E2E_PROJECT_REF(${ref})가 없어요: ${url}`);
 console.log(`표식 확인됨 — 테스트 전용 프로젝트(${new URL(url).host})로 진행합니다.`);
