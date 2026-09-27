@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Badge, TopBar } from '@/components/ui';
-import { MODE_LABEL, type Mode, type Recommendation } from '@/lib/recommend';
-import type { Band } from '@/lib/data/access-bands';
+import { MODE_LABEL, type Mode } from '@/lib/recommend';
+import type { TripRecommendation } from '@/lib/server/trip';
 import { dateShortcuts, fmtDate, parseDate } from '@/lib/time';
 import { DEFAULT_REASONS, parseTime, reasonCrossCheck, type Step, type Visit } from '@/lib/chat/flow';
 import type { DayItem } from '@/lib/day';
@@ -24,7 +24,7 @@ interface Props {
 }
 
 interface Answers { dest?: string; date?: string; departure?: string; reason?: string }
-type Result = Recommendation & { regionMissing: boolean; tripId: number | null; publishedUntil: string | null; accessBand: Band };
+type Result = Omit<TripRecommendation, 'onDemand'> & { tripId: number | null };
 
 export default function ChatScreen(p: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -123,10 +123,14 @@ export default function ChatScreen(p: Props) {
         const lines = [
           allDay.length ? `그날 하루 종일 일정 ${allDay.join(', ')}이 있어요.` : '',
           reasonCrossCheck(t, visitsTo(answers.dest!), airportName),
+          // 결과가 일부라도 있으면 "이렇게 걸려요"를 유지하고, 이동 시간이 없는 공항은 결과 아래 안내 상자로만 알린다.
+          // 결과가 0건인데 그 이유가 이동 시간 데이터라면 "이렇게 걸려요"는 틀린 말이라 안내를 보라고 한다.
           r.regionMissing ? '거주지에서 공항까지 걸리는 시간이 아직 DB에 없어 계산할 수 없어요.'
             : !r.rows.length && r.publishedUntil && answers.date! > r.publishedUntil
               ? `${fmtDate(r.publishedUntil)} 이후 운항 스케줄은 아직 공개되지 않았어요. 공개되면 자동으로 불러와요.`
-              : `${answers.departure}에 출발하면 공항별로 이렇게 걸려요.`,
+              : !r.rows.length && (r.noAccess.length || r.noAccessAny.length)
+                ? '이 이동수단으로는 아직 계산할 수 없어요. 아래 안내를 확인해 주세요.'
+                : `${answers.departure}에 출발하면 공항별로 이렇게 걸려요.`,
         ].filter(Boolean);
         push({ role: 'bot', text: lines.join('\n'), results: true, src: '출처 · 일정 DB + 방문 기록 DB + 운항 스케줄 DB' });
       });

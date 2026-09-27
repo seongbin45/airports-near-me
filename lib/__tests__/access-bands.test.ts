@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ANY_BAND, bandFor, bandTitle, bandsForLookup, isBand, kstInstant, kstWeekday, nextDepartureAt, toKakaoDepartureTime,
+  ANY_BAND, accessGaps, bandFor, bandTitle, bandsForLookup, isBand, pickBandRows, kstInstant, kstWeekday, nextDepartureAt, toKakaoDepartureTime,
 } from '../data/access-bands';
 
 // 시각대는 배치가 어떤 출발 시각으로 계산했는지를 정하고, 추천이 어느 행을 쓸지를 정한다.
@@ -86,5 +86,62 @@ describe('bandTitle / isBand / bandsForLookup', () => {
   it('추천은 정확한 시각대 → any 순으로 찾는다', () => {
     expect(bandsForLookup('weekday_pm')).toEqual(['weekday_pm', 'any']);
     expect(bandsForLookup('any')).toEqual(['any']);
+  });
+});
+
+describe('pickBandRows — 공항마다 쓸 이동 시간 행', () => {
+  it('시각대 행이 있으면 any보다 먼저, 행 순서와 무관하게', () => {
+    const rows = [
+      { airport: 'GMP', depart_band: 'weekday_day', minutes: 70 },
+      { airport: 'GMP', depart_band: 'any', minutes: 55 },
+      { airport: 'CJJ', depart_band: 'any', minutes: 80 },
+    ];
+    const picked = pickBandRows(rows, 'weekday_day');
+    expect(picked.find(r => r.airport === 'GMP')?.minutes).toBe(70);
+    expect(pickBandRows([...rows].reverse(), 'weekday_day').find(r => r.airport === 'GMP')?.minutes).toBe(70);
+    expect(picked.find(r => r.airport === 'CJJ')?.depart_band).toBe('any');
+  });
+  it('다른 시각대 행은 쓰지 않는다', () => {
+    expect(pickBandRows([{ airport: 'GMP', depart_band: 'weekend' }], 'weekday_day')).toEqual([]);
+  });
+});
+
+describe('accessGaps — 고른 이동수단으로 갈 수 없는 공항', () => {
+  const band = 'weekday_day' as const;
+  const car = [
+    { airport: 'GMP', depart_band: 'weekday_day' },
+    { airport: 'CJJ', depart_band: 'any' },
+    { airport: 'ICN', depart_band: 'any' },
+  ];
+
+  it('일부만 없음: 다른 이동수단에만 값이 있는 공항', () => {
+    const g = accessGaps({ band, chosen: [{ airport: 'GMP', depart_band: 'any' }], other: car, origins: ['GMP', 'CJJ', 'ICN'] });
+    expect(g).toEqual({ otherModeOnly: ['CJJ', 'ICN'], none: [] });
+  });
+
+  it('두 이동수단 모두 없음은 none으로 따로 모은다 (조용히 빠지지 않게)', () => {
+    const g = accessGaps({ band, chosen: [], other: car, origins: ['GMP', 'KWJ'] });
+    expect(g).toEqual({ otherModeOnly: ['GMP'], none: ['KWJ'] });
+  });
+
+  it('모두 있으면 빈 목록', () => {
+    expect(accessGaps({ band, chosen: car, other: [], origins: ['GMP', 'CJJ', 'ICN'] })).toEqual({ otherModeOnly: [], none: [] });
+  });
+
+  it('시각대 fallback: 다른 이동수단의 any는 있음, 다른 시각대(weekend)만 있으면 없음', () => {
+    const other = [{ airport: 'GMP', depart_band: 'any' }, { airport: 'CJJ', depart_band: 'weekend' }];
+    const g = accessGaps({ band, chosen: [], other, origins: ['GMP', 'CJJ'] });
+    expect(g).toEqual({ otherModeOnly: ['GMP'], none: ['CJJ'] });
+  });
+
+  it('고른 이동수단도 같은 규칙: 다른 시각대 행만 있으면 없는 것으로 본다', () => {
+    const g = accessGaps({ band, chosen: [{ airport: 'GMP', depart_band: 'weekend' }], other: car, origins: ['GMP'] });
+    expect(g).toEqual({ otherModeOnly: ['GMP'], none: [] });
+  });
+
+  it('그날 편이 없는 공항은 두 목록 모두에서 빠진다 (noRoute가 맡는다)', () => {
+    const g = accessGaps({ band, chosen: [], other: [], origins: ['GMP', 'GMP'] });
+    expect(g).toEqual({ otherModeOnly: [], none: ['GMP'] });
+    expect(accessGaps({ band, chosen: [], other: car, origins: [] })).toEqual({ otherModeOnly: [], none: [] });
   });
 });

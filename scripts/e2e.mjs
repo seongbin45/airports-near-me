@@ -152,6 +152,15 @@ async function chatFlow(page, tag) {
   await chatFlow(page, '1440×900');
   check('와이드 화면은 오른쪽 수집 정보 패널', await page.getByText('수집된 정보').isVisible());
   await page.screenshot({ path: `${OUT}/d1-chat-results.png` });
+
+  // 테스트 프로젝트에는 차량 이동 시간만 있다(e2e:seed). 대중교통으로 바꾸면 "거주지 데이터 없음"이 아니라
+  // 공항별 "대중교통 데이터가 아직 없어요" 안내가 나와야 한다.
+  await page.getByRole('button', { name: '대중교통으로 보기' }).click();
+  const noTransit = page.getByText(/대중교통으로 .+까지 가는 시간 데이터가 아직 없어요/);
+  await noTransit.waitFor({ timeout: 15000 });
+  check('[1440×900] 대중교통 값이 없으면 공항별 안내', await noTransit.isVisible());
+  check('[1440×900] 거주지 데이터 없음으로 잘못 안내하지 않음', (await page.getByText('거주지에서 공항까지 걸리는 시간이').count()) === 0);
+  await page.screenshot({ path: `${OUT}/d2-chat-transit.png` });
   await ctx.close();
 }
 

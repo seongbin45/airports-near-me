@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { Badge, SampleTag } from '@/components/ui';
-import { DOMESTIC_BUFFER_MIN, MODE_LABEL, STALE_DAYS, type Mode, type Recommendation, type RecommendRow } from '@/lib/recommend';
-import { bandTitle, type Band } from '@/lib/data/access-bands';
+import { DOMESTIC_BUFFER_MIN, MODE_LABEL, STALE_DAYS, type Mode, type RecommendRow } from '@/lib/recommend';
+import { bandTitle } from '@/lib/data/access-bands';
+import type { TripRecommendation } from '@/lib/server/trip';
 import { fmtDur } from '@/lib/time';
 import type { DayItem } from '@/lib/day';
 
@@ -22,13 +23,16 @@ export interface Msg {
 interface Props {
   msgs: Msg[];
   // tripId는 추천이 DB에 기록된 뒤에만 있다(이동수단만 바꿔 다시 볼 때는 null).
-  result: (Recommendation & { regionMissing: boolean; tripId?: number | null; accessBand: Band }) | null;
+  result: (Omit<TripRecommendation, 'onDemand' | 'publishedUntil'> & { tripId?: number | null }) | null;
   dest?: string;
   departure?: string;
   mode: Mode;
   onSend: (question: string, id: number) => void;
   onCancel: (id: number) => void;
 }
+
+/** 이동 시간을 재는 곳 — 값이 없을 때 "실측이 끝나면" 안내에 쓴다 */
+const MEASURED_BY: Record<Mode, string> = { car: '카카오모빌리티', transit: 'ODsay' };
 
 const card = 'w-full max-w-[440px] rounded-2xl border border-line bg-surface py-1.5';
 
@@ -112,7 +116,10 @@ function Results({ result, dest, departure, mode }: { result: NonNullable<Props[
   const excluded = [
     result.noRoute.length ? `${result.noRoute.join('·')} → ${dest}은(는) 그날 운항 스케줄 DB에 편이 없어 제외했어요.` : '',
     result.noFlightInTime.length ? `${result.noFlightInTime.join('·')}에서는 ${departure}에 출발해 탈 수 있는 편이 없어요.` : '',
+    result.noAccessAny.length ? `${result.noAccessAny.join('·')}은(는) 집에서 가는 시간 데이터가 없어 제외했어요.` : '',
   ].filter(Boolean);
+  // Mode는 차량·대중교통 두 값만 받는다. 이동 선호 시안의 '둘 다 비교(auto)'가 들어오면 이 문구를 다시 설계해야 한다.
+  const otherMode: Mode = mode === 'car' ? 'transit' : 'car';
 
   return (
     <div className="flex w-full flex-col gap-2.5">
@@ -142,6 +149,12 @@ function Results({ result, dest, departure, mode }: { result: NonNullable<Props[
       {result.tripId != null && result.rows.length > 0 && (
         <div className="px-1 text-xs leading-normal text-muted text-pretty">
           다녀온 뒤에는 <Link href="/me" className="font-semibold text-accent underline underline-offset-2">내 데이터</Link>에서 이 여정을 확인하고 방문 기록으로 남길 수 있어요.
+        </div>
+      )}
+      {result.noAccess.length > 0 && (
+        <div className="rounded-xl bg-warn-soft px-3 py-2.5 text-xs leading-normal text-warn text-pretty">
+          {MODE_LABEL[mode]}으로 {result.noAccess.join('·')}까지 가는 시간 데이터가 아직 없어요.
+          {' '}{MODE_LABEL[otherMode]}으로 바꿔 보시거나, 실측({MEASURED_BY[mode]})이 끝난 뒤 다시 확인해 주세요.
         </div>
       )}
       {result.rows.some(r => !r.accessBandMatched) && (
