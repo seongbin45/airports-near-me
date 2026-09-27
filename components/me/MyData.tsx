@@ -66,9 +66,14 @@ export default function MyData(p: Props) {
   const [tab, setTab] = useState<Tab>('basic');
   const [visits, setVisits] = useState(p.visits);
   const [pending, setPending] = useState(p.pending);
+  // router.refresh()로 서버가 확인 대기를 다시 계산해 보내면(타임라인 가져오기, 동의 다시 켜기) 그 목록으로 바꾼다.
+  // useState 초기값만으로는 새 props가 반영되지 않는다.
+  const [pendingProp, setPendingProp] = useState(p.pending);
+  if (pendingProp !== p.pending) { setPendingProp(p.pending); setPending(p.pending); }
   const [filter, setFilter] = useState('전체');
   const [consent, setConsent] = useState(p.hasConsent);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [revoked, setRevoked] = useState(false);
   const [ai, setAi] = useState(p.aiEnabled);
   const [confirmDel, setConfirmDel] = useState(false);
   // 확인 상태가 된 시각 — 너무 빠른 두 번째 탭을 거르는 데 쓴다 (lib/confirm.ts)
@@ -103,6 +108,8 @@ export default function MyData(p: Props) {
   async function visitApi(body: Record<string, unknown>): Promise<Record<string, unknown> | null> {
     const res = await fetch('/api/visits', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const json = await res.json().catch(() => ({}));
+    // 다른 탭·기기에서 동의를 끈 경우: 오류 대신 동의 안내 화면으로 바꾼다
+    if (res.status === 403 && json.code === 'no_consent') { setConsent(false); setPending([]); return null; }
     if (!res.ok) { setErr(json.error ?? '요청에 실패했어요.'); return null; }
     return json;
   }
@@ -159,7 +166,8 @@ export default function MyData(p: Props) {
   async function toggleConsent() {
     if (!consent) {
       if (fail((await supabase.from('location_consents').insert({ version: '2026-09-v1' })).error)) return;
-      setConsent(true);
+      setConsent(true); setRevoked(false);
+      router.refresh(); // 동의가 없어 비워 두었던 확인 대기를 서버에서 다시 받는다
       return;
     }
     // 스위치를 한 번 더 누르면 확정 (디자인과 동일), 아래 버튼으로도 확정 가능.
@@ -172,9 +180,9 @@ export default function MyData(p: Props) {
     setConfirmRevoke(true);
   }
   async function revoke() {
-    if (fail((await supabase.from('location_consents').update({ revoked_at: new Date().toISOString() }).is('revoked_at', null)).error)) return;
-    if (fail((await supabase.from('visits').delete().gte('id', 0)).error)) return;
-    setConsent(false); setConfirmRevoke(false); setVisits([]);
+    // 동의 철회 기록 + 방문 기록·확인 대기 후보 삭제를 DB 함수 하나(한 트랜잭션)로. 중간에 실패해 한쪽만 남지 않게.
+    if (fail((await supabase.rpc('revoke_location_consent')).error)) return;
+    setConsent(false); setConfirmRevoke(false); setVisits([]); setPending([]); setRevoked(true);
   }
   async function toggleAi() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -288,7 +296,13 @@ export default function MyData(p: Props) {
                 </div>
                 {visits.some(v => v.is_sample) && <span className="flex-none"><SampleTag /></span>}
               </div>
-              {!!pending.length && (
+              {!consent && (
+                <div className="flex flex-col items-start gap-2 rounded-2xl border border-line bg-surface px-4 py-3.5">
+                  <div className="text-[13px] leading-normal text-ink-2 text-pretty">위치정보 동의를 켜면 방문 기록을 남길 수 있어요.</div>
+                  <button onClick={() => setTab('privacy')} className="min-h-10 rounded-full border border-line-strong bg-surface px-3.5 text-[13px] font-semibold">개인정보 탭으로</button>
+                </div>
+              )}
+              {consent && !!pending.length && (
                 <div className="flex flex-col gap-2.5">
                   <div className="text-[13px] leading-normal text-ink-2 text-pretty">
                     다녀오신 여정이 있는데 아직 기록으로 남기지 않았어요. 확인하면 다음 추천에서 지난 방문으로 써요.
@@ -313,7 +327,7 @@ export default function MyData(p: Props) {
                   ))}
                 </div>
               )}
-              <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-4 py-3.5">
+              {consent && <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-4 py-3.5">
                 <div className="text-[13px] font-semibold text-ink-2">구글 타임라인 가져오기</div>
                 <div className="text-xs leading-normal text-muted text-pretty">
                   휴대폰에서 내보낸 Timeline.json을 올리면 공항에 다녀온 여정을 찾아 확인 대기에 넣어요.
@@ -323,7 +337,7 @@ export default function MyData(p: Props) {
                   onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; importTimeline(f); }}
                   className="text-xs file:mr-2 file:min-h-9 file:rounded-full file:border file:border-line-strong file:bg-surface file:px-3 file:text-[13px] file:font-semibold" />
                 {importMsg && <div className="text-[12px] leading-normal text-ink-2 text-pretty">{importMsg}</div>}
-              </div>
+              </div>}
               <div className="flex flex-wrap gap-1.5">
                 {['전체', '이유 미입력', ...reasons].map(f => (
                   <button key={f} onClick={() => setFilter(f)} className={`min-h-9 rounded-full px-3 text-[13px] font-semibold ${pill(filter === f)}`}>{f}</button>
@@ -444,6 +458,7 @@ export default function MyData(p: Props) {
                   {confirmDel ? '한 번 더 누르면 계정과 모든 데이터가 삭제돼요' : '계정 삭제'}
                 </button>
                 {confirmDel && <button onClick={() => setConfirmDel(false)} className="min-h-10 text-[13px] text-muted">취소</button>}
+                {revoked && <div className="text-center text-[13px] text-ink-2">위치정보 동의를 철회하고 방문 기록을 삭제했어요.</div>}
               </div>
             </div>
           )}

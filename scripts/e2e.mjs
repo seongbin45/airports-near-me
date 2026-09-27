@@ -208,6 +208,49 @@ async function chatFlow(page, tag) {
   await ctx.close();
 }
 
+// ── 내 데이터: 위치정보 동의 철회 (방문 기록을 지우므로 맨 마지막에 둔다)
+{
+  const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, locale: 'ko-KR' });
+  const page = await ctx.newPage();
+  await login(page);
+  await page.waitForURL('**/chat');
+  // 타임라인에서 찾은 여정 하나를 확인 대기 후보로 넣는다 (파일 파싱은 브라우저 몫이라 API로 바로 보낸다)
+  const importOne = () => page.request.post(`${BASE}/api/visits`, {
+    data: { action: 'import_timeline', trips: [{ from_airport: 'GMP', dest_airport: 'CJU', depart_on: '2025-05-03' }] },
+  });
+  const first = await importOne();
+  check('[revoke] 타임라인 후보 1건 추가', first.ok() && (await first.json()).added === 1, String(first.status()));
+
+  await page.goto(`${BASE}/me`);
+  await page.getByRole('tab', { name: '방문 기록' }).click();
+  check('[revoke] 확인 대기 1건 표시', await page.getByText(/확인 대기 1건/).isVisible());
+
+  await page.getByRole('tab', { name: '개인정보' }).click();
+  await page.getByRole('switch', { name: /위치정보/ }).click();
+  await page.getByRole('button', { name: '동의 철회하고 삭제' }).click();
+  await page.getByText('위치정보 동의를 철회하고 방문 기록을 삭제했어요.').waitFor();
+  check('[revoke] 철회 완료 문구', true);
+
+  const again = await importOne();
+  check('[revoke] 동의가 꺼지면 타임라인 가져오기 403', again.status() === 403, String(again.status()));
+
+  await page.reload();
+  await page.getByRole('tab', { name: '방문 기록' }).click();
+  check('[revoke] 새로고침 뒤 방문 기록 0건 + 동의 안내',
+    await page.getByText(/^공항 방문 0회/).isVisible() && await page.getByText('위치정보 동의를 켜면 방문 기록을 남길 수 있어요.').isVisible());
+  await page.screenshot({ path: `${OUT}/me5-revoked.png`, fullPage: true });
+
+  // 동의를 다시 켜면 서버가 확인 대기를 다시 계산한다. 후보가 DB에 남아 있었다면 여기서 다시 보인다.
+  await page.getByRole('tab', { name: '개인정보' }).click();
+  await page.getByRole('switch', { name: /위치정보/ }).click();
+  await page.waitForFunction(() => document.querySelector('[role=switch]')?.getAttribute('aria-checked') === 'true');
+  await page.reload();
+  await page.getByRole('tab', { name: '방문 기록' }).click();
+  await page.getByText('구글 타임라인 가져오기').waitFor();
+  check('[revoke] 동의를 다시 켜도 확인 대기 0건 (visit_candidates 삭제됨)', (await page.getByText(/확인 대기 \d+건/).count()) === 0);
+  await ctx.close();
+}
+
 await browser.close();
 const failed = results.filter(r => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

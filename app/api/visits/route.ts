@@ -8,6 +8,18 @@ import { candidateError, confirmableError, visitFromCandidate, visitFromTrip, ty
 // 목적지·날짜·출발 공항은 요청 본문이 아니라 DB의 여정 행에서 읽는다.
 const TRIP_COLS = 'id, dest_city, trip_date, reason, chosen_origin, chosen_flight_no, visit_dismissed_at';
 
+type Supabase = Awaited<ReturnType<typeof getUser>>['supabase'];
+
+/** 철회되지 않은 위치정보 동의가 있는지 (RLS로 본인 행만 읽힌다) */
+async function hasConsent(supabase: Supabase): Promise<boolean> {
+  const { data, error } = await supabase.from('location_consents').select('id').is('revoked_at', null).limit(1);
+  if (error) throw error;
+  return !!data?.length;
+}
+
+// 방문 기록을 새로 만드는 요청만 동의를 요구한다. 지우기·안 갔어요·이유 고치기는 동의와 상관없이 된다.
+const NEEDS_CONSENT = new Set(['confirm', 'confirm_candidate', 'import_timeline']);
+
 export async function POST(request: Request) {
   const { supabase, user } = await getUser();
   if (!user) return NextResponse.json({ error: '로그인이 필요해요.' }, { status: 401 });
@@ -15,6 +27,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const action = body?.action;
   const today = kstToday();
+
+  if (typeof action === 'string' && NEEDS_CONSENT.has(action) && !await hasConsent(supabase)) {
+    return NextResponse.json({ error: '위치정보 동의가 꺼져 있어요.', code: 'no_consent' }, { status: 403 });
+  }
 
   if (action === 'confirm') {
     const tripId = Number(body?.tripId);

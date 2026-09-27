@@ -51,7 +51,10 @@ export default async function MePage() {
       classes={classes.data ?? []}
       events={events.data ?? []}
       visits={visits.data ?? []}
-      pending={pendingVisits((trips.data ?? []) as TripRow[], (candidates.data ?? []) as CandidateRow[], visits.data ?? [], kstToday())}
+      // 동의가 없으면 방문 기록을 새로 만들 수 없으니(/api/visits 403) 확인 대기도 보여주지 않는다
+      pending={consent.data?.length
+        ? pendingVisits((trips.data ?? []) as TripRow[], (candidates.data ?? []) as CandidateRow[], visits.data ?? [], kstToday())
+        : []}
       airports={airports.data ?? []}
       aiCalls={(aiCalls.data ?? []) as unknown as AiCallRow[]}
       hasConsent={!!consent.data?.length}
