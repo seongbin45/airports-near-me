@@ -39,7 +39,7 @@ interface Props {
 
 const TABS = [['basic', '기본 정보'], ['trips', '방문 기록'], ['ai', 'AI 기록'], ['privacy', '개인정보']] as const;
 type Tab = (typeof TABS)[number][0];
-const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
+const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일', everytime: '에브리타임' };
 /** 타임라인 내보내기 파일 상한. 이보다 큰 파일을 JSON.parse하면 브라우저가 멈춘다 */
 const MAX_TIMELINE_BYTES = 50 * 1024 * 1024;
 /** 어느 모델이 답했는지 한 줄로. 서버 측 폴백이 일어나면 요청 모델과 다르므로 그때는 화살표로 보여준다. */
