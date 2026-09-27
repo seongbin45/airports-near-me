@@ -32,6 +32,13 @@ const need = (k: string) => {
   return v;
 };
 
+// 값이 없으면 즉시 중단하고, 있으면 그 타입 그대로 돌려준다.
+// next build의 TS 검사에서 `possibly null/undefined`가 남지 않게 한 곳에서 좁힌다.
+const must = <T>(v: T | null | undefined, msg: string): T => {
+  if (v == null) { console.error(`중단: ${msg}`); process.exit(2); }
+  return v;
+};
+
 const url = need('NEXT_PUBLIC_SUPABASE_URL');
 const admin = createClient(url, need('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
 
@@ -137,8 +144,8 @@ if (existing) {
 }
 
 const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-const createdUser = created?.user;
-if (createErr || !createdUser) fail(`계정을 만들지 못했어요: ${createErr?.message ?? 'user 없음'}`);
+if (createErr) fail(`계정을 만들지 못했어요: ${createErr.message}`);
+const createdUser = must(created?.user, '계정을 만들지 못했어요: user 없음');
 const userId = createdUser.id;
 console.log(`계정 생성: ${email}`);
 
@@ -174,8 +181,7 @@ const addDays = (s: string, n: number) => {
 const { data: lastValid, error: rangeErr } = await admin.from('flight_schedules').select('valid_to')
   .eq('is_sample', false).not('valid_to', 'is', null).order('valid_to', { ascending: false }).limit(1).maybeSingle();
 if (rangeErr) fail(`운항 스케줄 범위를 읽지 못했어요: ${rangeErr.message}`);
-const until = (lastValid?.valid_to ?? null) as string | null;
-if (!until) fail('실제 운항 스케줄이 없어요. test 프로젝트에 sync를 먼저 채워야 합니다.');
+const until = must(lastValid?.valid_to, '실제 운항 스케줄이 없어요. test 프로젝트에 sync를 먼저 채워야 합니다.');
 
 const horizon = Number(process.env.E2E_HORIZON_DAYS ?? 120);
 let date = addDays(kstToday, 2);
