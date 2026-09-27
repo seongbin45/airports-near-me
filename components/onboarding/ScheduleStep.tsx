@@ -7,6 +7,7 @@ import { layoutLanes } from '@/lib/onboarding/lanes';
 import { dateShortcuts, fmtDate, toMin } from '@/lib/time';
 import { GOOGLE_CALENDAR_READY, ICS_IMPORT_READY } from '@/lib/data/calendar-import';
 import IcsImport from './IcsImport';
+import EverytimeImport from './EverytimeImport';
 import { inputCls, pill } from '@/components/ui';
 
 export interface EventItem extends EventDraft { id: number; source: string }
@@ -113,6 +114,7 @@ function Classes({ supabase, classes, setClasses }: Pick<Props, 'supabase' | 'cl
 
   return (
     <div className="flex flex-col gap-3.5">
+      <EverytimeImport supabase={supabase} classes={classes} setClasses={setClasses} />
       <div className="overflow-x-auto rounded-2xl border border-line bg-surface p-3">
         <div className="grid min-w-[320px] gap-x-1 gap-y-1.5" style={{ gridTemplateColumns: `40px repeat(${gridDays.length},minmax(52px,1fr))` }}>
           <div />

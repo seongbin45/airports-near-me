@@ -111,7 +111,7 @@ export default function IcsImport({ supabase, isStudent, classes, setClasses, ev
         <li>애플 캘린더(Mac): 캘린더를 고른 뒤 파일 → 내보내기 → 내보내기.</li>
         <li>파일은 이 기기에서만 읽고 서버로 보내지 않아요. 고른 수업·일정만 저장돼요.</li>
       </ol>
-      <div className="text-xs leading-normal text-muted">에브리타임은 파일 내보내기를 지원하지 않아 직접 입력해 주세요.</div>
+      <div className="text-xs leading-normal text-muted">에브리타임은 파일 내보내기를 지원하지 않아요. 수업 시간표 탭의 [에브리타임 시간표 불러오기]를 써 주세요.</div>
       {/* 값을 비워 두어야 같은 파일을 다시 골라도 change가 일어난다 (고친 뒤 다시 가져오기) */}
       <input type="file" accept=".ics,text/calendar" onChange={e => { void onFile(e.target.files?.[0]); e.target.value = ''; }}
         className="text-sm file:mr-3 file:min-h-10 file:rounded-full file:border file:border-line-strong file:bg-surface file:px-4 file:text-sm file:font-semibold" />
