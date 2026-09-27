@@ -109,3 +109,37 @@ export function isBand(v: unknown): v is Band {
 export function bandsForLookup(band: Band): Band[] {
   return band === ANY_BAND ? [ANY_BAND] : [band, ANY_BAND];
 }
+
+/**
+ * 공항마다 쓸 이동 시간 행 하나: 여정의 시각대 행 → 없으면 'any' 행.
+ * 다른 시각대(예: 평일 여정에 weekend 행)는 쓰지 않는다. 같은 공항에 두 행이 함께 와도 행 순서에 기대지 않는다.
+ */
+export function pickBandRows<T extends { airport: string; depart_band: string }>(rows: T[], band: Band): T[] {
+  const allowed: string[] = bandsForLookup(band);
+  const byAirport = new Map<string, T>();
+  for (const row of rows) {
+    if (!allowed.includes(row.depart_band)) continue;
+    const cur = byAirport.get(row.airport);
+    if (!cur || (row.depart_band === band && cur.depart_band !== band)) byAirport.set(row.airport, row);
+  }
+  return [...byAirport.values()];
+}
+
+/**
+ * 그날 목적지행 편이 있는 출발 공항(origins) 가운데, 고른 이동수단으로는 이동 시간이 없는 공항.
+ * 두 이동수단 모두 같은 시각대 규칙(pickBandRows)을 거친다 — 안내와 실제 추천이 다른 기준을 쓰지 않게.
+ * - otherModeOnly: 다른 이동수단에는 값이 있다 → "바꿔 보세요" 안내
+ * - none: 어느 이동수단에도 값이 없다 → 결과에서 빠진 이유를 따로 알린다
+ * 편이 없는 공항은 여기서 다루지 않는다(추천의 noRoute가 맡는다).
+ */
+export function accessGaps(p: {
+  band: Band;
+  chosen: { airport: string; depart_band: string }[];
+  other: { airport: string; depart_band: string }[];
+  origins: string[];
+}): { otherModeOnly: string[]; none: string[] } {
+  const chosen = new Set(pickBandRows(p.chosen, p.band).map(r => r.airport));
+  const other = new Set(pickBandRows(p.other, p.band).map(r => r.airport));
+  const missing = [...new Set(p.origins)].filter(a => !chosen.has(a)).sort();
+  return { otherModeOnly: missing.filter(a => other.has(a)), none: missing.filter(a => !other.has(a)) };
+}

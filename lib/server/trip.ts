@@ -5,7 +5,7 @@ import { dayPlan } from '../day';
 import { createAdminClient } from '../supabase/admin';
 import { ensureFresh, type EnsureResult } from './flight-sync';
 import { weekdayKo } from '../time';
-import { bandFor, bandsForLookup, type Band } from '../data/access-bands';
+import { accessGaps, bandFor, bandsForLookup, pickBandRows, type Band } from '../data/access-bands';
 
 export interface TripInput {
   dest: string;
@@ -34,30 +34,49 @@ export async function loadDay(supabase: SupabaseClient, date: string) {
 }
 
 /** 거주지 기준 공항별 접근 시간 + 목적지행 편 → 추천. 모두 DB 값만 쓴다. */
-export async function loadRecommendation(supabase: SupabaseClient, userId: string, t: TripInput): Promise<Recommendation & { regionMissing: boolean; onDemand: EnsureResult | null; publishedUntil: string | null; accessBand: Band }> {
+export interface TripRecommendation extends Recommendation {
+  /** 거주지에서 어느 공항으로도, 어느 이동수단으로도 이동 시간이 없음 */
+  regionMissing: boolean;
+  /** 고른 이동수단으로는 이동 시간이 없고 다른 이동수단에는 있는 공항 (이름) */
+  noAccess: string[];
+  /** 그날 편은 있는데 어느 이동수단으로도 이동 시간이 없는 공항 (이름) */
+  noAccessAny: string[];
+  onDemand: EnsureResult | null;
+  publishedUntil: string | null;
+  accessBand: Band;
+}
+
+const shortName = (nameKo: string | undefined, code: string) => nameKo?.replace('국제공항', '') ?? code;
+
+export async function loadRecommendation(supabase: SupabaseClient, userId: string, t: TripInput): Promise<TripRecommendation> {
   const { data: profile, error } = await supabase.from('profiles').select('region_id').eq('id', userId).single();
   if (error) throw error;
 
   // 여정의 날짜·출발 시각이 속한 시각대. 그 시각대 행이 없으면 'any'(호출 시점 실시간)로 물러선다.
   const band = bandFor(t.date, t.departure);
-  const [access, destAirports] = await Promise.all([
+  const otherMode: Mode = t.mode === 'car' ? 'transit' : 'car';
+  const [access, otherAccess, destAirports, airportNames] = await Promise.all([
     supabase.from('access_times').select('airport, minutes, source, depart_band, airports(name_ko, city)')
       .eq('region_id', profile.region_id ?? -1).eq('mode', t.mode).in('depart_band', bandsForLookup(band)),
+    // 다른 이동수단은 "값이 있는지"만 본다. 같은 시각대 규칙으로 조회해 안내와 추천의 기준을 맞춘다.
+    supabase.from('access_times').select('airport, depart_band')
+      .eq('region_id', profile.region_id ?? -1).eq('mode', otherMode).in('depart_band', bandsForLookup(band)),
     supabase.from('airports').select('code').eq('city', t.dest),
+    supabase.from('airports').select('code, name_ko'),
   ]);
   if (access.error) throw access.error;
+  if (otherAccess.error) throw otherAccess.error;
   if (destAirports.error) throw destAirports.error;
+  if (airportNames.error) throw airportNames.error;
 
   // 같은 공항에 시각대 행과 'any' 행이 함께 오면 시각대 행을 쓴다 (행 순서에 기대지 않는다)
-  const byAirport = new Map<string, (typeof access.data)[number]>();
-  for (const row of access.data) {
-    const cur = byAirport.get(row.airport);
-    if (!cur || (row.depart_band === band && cur.depart_band !== band)) byAirport.set(row.airport, row);
-  }
-  const accessRows = [...byAirport.values()];
+  const accessRows = pickBandRows(access.data, band);
+  const otherRows = pickBandRows(otherAccess.data, band);
 
   // 사용자가 고른 날짜·노선이 DB에 없으면 지금 API로 불러와 저장한 뒤 추천한다 (실패·시간 초과면 DB에 있는 것으로)
-  const onDemand = await fillOnDemand(accessRows.map(a => a.airport), destAirports.data.map(a => a.code), t.date);
+  // 두 이동수단의 공항을 함께 넘긴다 — 값이 없는 이동수단을 골라도 "어느 공항에 편이 있는지"는 알려야 한다.
+  const origins = [...new Set([...accessRows, ...otherRows].map(a => a.airport))];
+  const onDemand = await fillOnDemand(origins, destAirports.data.map(a => a.code), t.date);
 
   // 공개된 정기 스케줄의 마지막 날 — 그 뒤 날짜는 "아직 공개 전"으로 안내
   const { data: until } = await supabase.from('flight_schedules').select('valid_to')
@@ -74,10 +93,19 @@ export async function loadRecommendation(supabase: SupabaseClient, userId: strin
   const accessTimes: AccessTime[] = accessRows.map(a => ({
     airport: a.airport, minutes: a.minutes, source: a.source,
     band: a.depart_band as AccessTime['band'], bandMatched: a.depart_band === band,
-    airportName: (a.airports as unknown as { name_ko: string; city: string } | null)?.name_ko.replace('국제공항', '') ?? a.airport,
+    airportName: shortName((a.airports as unknown as { name_ko: string; city: string } | null)?.name_ko, a.airport),
     city: (a.airports as unknown as { name_ko: string; city: string } | null)?.city ?? null,
   }));
-  return { ...recommend(t.departure, accessTimes, pickBestSource(inSeason as Flight[])), regionMissing: !accessTimes.length, onDemand, publishedUntil: until?.valid_to ?? null, accessBand: band };
+  const gaps = accessGaps({ band, chosen: accessRows, other: otherRows, origins: inSeason.map(f => f.origin as string) });
+  const nameOf = new Map(airportNames.data.map(a => [a.code as string, a.name_ko as string]));
+  const names = (codes: string[]) => codes.map(c => shortName(nameOf.get(c), c));
+  return {
+    ...recommend(t.departure, accessTimes, pickBestSource(inSeason as Flight[])),
+    regionMissing: !accessRows.length && !otherRows.length,
+    noAccess: names(gaps.otherModeOnly),
+    noAccessAny: names(gaps.none),
+    onDemand, publishedUntil: until?.valid_to ?? null, accessBand: band,
+  };
 }
 
 async function fillOnDemand(origins: string[], dests: string[], date: string): Promise<EnsureResult | null> {

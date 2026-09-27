@@ -42,10 +42,13 @@ RLS(행 수준 보안)는 **키에 따라 적용되느냐 마느냐가 갈린다
 | `class_timetable` | 수업 시간표(`source`: manual·ics·google_calendar) | 온보딩(일정), 대화의 날짜 계획 | 온보딩, .ics 가져오기 | 계정 삭제 |
 | `schedules` | 개인 일정 | 온보딩, `/me`, 대화의 날짜 계획 | 온보딩, 타임라인 가져오기, .ics 가져오기 | 계정 삭제 |
 | `visits` | 방문 기록 | `/me` | `/me`, `POST /api/visits`(확인), 타임라인 | **동의 철회 즉시** · 계정 삭제 |
-| `visit_candidates` | 타임라인에서 온 확인 대기 후보 | `/me` | 타임라인 가져오기 | 사용자가 "안 갔어요"(dismiss) · 계정 삭제 |
+| `visit_candidates` | 타임라인에서 온 확인 대기 후보 | `/me` | 타임라인 가져오기 | 사용자가 "안 갔어요"(dismiss) · **동의 철회 즉시** · 계정 삭제 |
 | `trips` | 추천한 여정(고른 편·편명·출발/도착 시각) | `/me`(확인 대기) | `POST /api/recommend` | 계정 삭제 |
 | `ai_calls` | AI 호출 기록(프롬프트·응답·검증 결과·제공자·모델) | `/me`(AI 기록) | `POST /api/ai` | 계정 삭제 |
 | `location_consents` | 위치정보 동의 이력(버전·동의 시각·철회 시각) | 온보딩, `/me` | 온보딩, `/me` | 계정 삭제 |
+
+동의 철회는 `public.revoke_location_consent()` 한 번으로 처리한다(`security invoker`, 한 트랜잭션): 동의 행의 `revoked_at` 기록, `visits`·`visit_candidates` 삭제. `trips`는 남긴다.
+동의가 꺼져 있으면 `POST /api/visits`의 확인·타임라인 가져오기는 403(`code: 'no_consent'`)이다.
 
 `visits`의 동의 철회는 정책상 **즉시 삭제**이고 유예 기간도 유예용 스키마도 두지 않는다(`docs/CONTINGENCY.md`).
 

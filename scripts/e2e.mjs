@@ -43,7 +43,9 @@ async function login(page) {
   await page.waitForURL('**/login');
   await page.fill('input[type=email]', process.env.DEV_TEST_EMAIL);
   await page.fill('input[type=password]', process.env.DEV_TEST_PASSWORD);
-  await page.click('text=(개발용) 비밀번호로 로그인');
+  // 일반 이메일·비밀번호 로그인을 쓴다. '(개발용)' 버튼은 NODE_ENV가 production이 아닐 때만 보이는데,
+  // CI는 build → start(production)로 돌아서 그 버튼이 없다.
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
 }
 
 async function chatFlow(page, tag) {
@@ -152,6 +154,15 @@ async function chatFlow(page, tag) {
   await chatFlow(page, '1440×900');
   check('와이드 화면은 오른쪽 수집 정보 패널', await page.getByText('수집된 정보').isVisible());
   await page.screenshot({ path: `${OUT}/d1-chat-results.png` });
+
+  // 테스트 프로젝트에는 차량 이동 시간만 있다(e2e:seed). 대중교통으로 바꾸면 "거주지 데이터 없음"이 아니라
+  // 공항별 "대중교통 데이터가 아직 없어요" 안내가 나와야 한다.
+  await page.getByRole('button', { name: '대중교통으로 보기' }).click();
+  const noTransit = page.getByText(/대중교통으로 .+까지 가는 시간 데이터가 아직 없어요/);
+  await noTransit.waitFor({ timeout: 15000 });
+  check('[1440×900] 대중교통 값이 없으면 공항별 안내', await noTransit.isVisible());
+  check('[1440×900] 거주지 데이터 없음으로 잘못 안내하지 않음', (await page.getByText('거주지에서 공항까지 걸리는 시간이').count()) === 0);
+  await page.screenshot({ path: `${OUT}/d2-chat-transit.png` });
   await ctx.close();
 }
 
@@ -196,6 +207,49 @@ async function chatFlow(page, tag) {
   await page.getByText('어디에 사세요?').waitFor();
   check('[me] 수정 → 가입의 거주지 단계로', true);
   check('[me] 가로 스크롤 없음', await noHScroll(page));
+  await ctx.close();
+}
+
+// ── 내 데이터: 위치정보 동의 철회 (방문 기록을 지우므로 맨 마지막에 둔다)
+{
+  const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, locale: 'ko-KR' });
+  const page = await ctx.newPage();
+  await login(page);
+  await page.waitForURL('**/chat');
+  // 타임라인에서 찾은 여정 하나를 확인 대기 후보로 넣는다 (파일 파싱은 브라우저 몫이라 API로 바로 보낸다)
+  const importOne = () => page.request.post(`${BASE}/api/visits`, {
+    data: { action: 'import_timeline', trips: [{ from_airport: 'GMP', dest_airport: 'CJU', depart_on: '2025-05-03' }] },
+  });
+  const first = await importOne();
+  check('[revoke] 타임라인 후보 1건 추가', first.ok() && (await first.json()).added === 1, String(first.status()));
+
+  await page.goto(`${BASE}/me`);
+  await page.getByRole('tab', { name: '방문 기록' }).click();
+  check('[revoke] 확인 대기 1건 표시', await page.getByText(/확인 대기 1건/).isVisible());
+
+  await page.getByRole('tab', { name: '개인정보' }).click();
+  await page.getByRole('switch', { name: /위치정보/ }).click();
+  await page.getByRole('button', { name: '동의 철회하고 삭제' }).click();
+  await page.getByText('위치정보 동의를 철회하고 방문 기록을 삭제했어요.').waitFor();
+  check('[revoke] 철회 완료 문구', true);
+
+  const again = await importOne();
+  check('[revoke] 동의가 꺼지면 타임라인 가져오기 403', again.status() === 403, String(again.status()));
+
+  await page.reload();
+  await page.getByRole('tab', { name: '방문 기록' }).click();
+  check('[revoke] 새로고침 뒤 방문 기록 0건 + 동의 안내',
+    await page.getByText(/^공항 방문 0회/).isVisible() && await page.getByText('위치정보 동의를 켜면 방문 기록을 남길 수 있어요.').isVisible());
+  await page.screenshot({ path: `${OUT}/me5-revoked.png`, fullPage: true });
+
+  // 동의를 다시 켜면 서버가 확인 대기를 다시 계산한다. 후보가 DB에 남아 있었다면 여기서 다시 보인다.
+  await page.getByRole('tab', { name: '개인정보' }).click();
+  await page.getByRole('switch', { name: /위치정보/ }).click();
+  await page.waitForFunction(() => document.querySelector('[role=switch]')?.getAttribute('aria-checked') === 'true');
+  await page.reload();
+  await page.getByRole('tab', { name: '방문 기록' }).click();
+  await page.getByText('구글 타임라인 가져오기').waitFor();
+  check('[revoke] 동의를 다시 켜도 확인 대기 0건 (visit_candidates 삭제됨)', (await page.getByText(/확인 대기 \d+건/).count()) === 0);
   await ctx.close();
 }
 
