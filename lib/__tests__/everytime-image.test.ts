@@ -84,7 +84,7 @@ describe('completeWithFallback — 이미지 전달', () => {
       return new Response(JSON.stringify(reply[id]), { status: 200, headers: { 'content-type': 'application/json' } });
     });
     const r = await completeWithFallback('s', 'u', { providers: [P[id]], fetchImpl, images: [img], schema: TIMETABLE_SCHEMA, parse: parseTimetableAnswer });
-    expect(r.output).toEqual({ semester: '', blocks: [], online: [] });
+    expect(r.output).toEqual({ semester: '', visibleUntil: null, blocks: [], online: [] });
     const body = JSON.stringify(sent);
     expect(body).toContain(img.base64);
     // 시간표 스키마가 실렸다(문장 답 스키마가 아니라). xAI는 스키마 대신 json_object — 모양은 SYSTEM 문장에 적혀 있다

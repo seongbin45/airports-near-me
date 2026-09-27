@@ -257,6 +257,7 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
               const chk = checks[i];
               const can = !r.item.online && !!chk?.ok && r.timeOk;
               const note = r.item.online ? '시간이 없는 과목은 출발 시각 계산에 쓰지 않아 뺐어요.'
+                : r.item.endUnknown && !r.item.end ? '끝나는 시각이 캡처 아래에서 잘렸어요. 에브리타임에서 확인해 직접 넣어 주세요(빼면 그날 출발 시각이 틀려져요).'
                 : r.note ?? (chk && !chk.ok ? chk.msg : chk?.msg ? chk.msg : '');
               return (
                 <div key={i} className={`flex gap-3 px-3 py-2.5 ${i ? 'border-t border-divider' : ''}`}>
@@ -265,7 +266,7 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="text-sm font-semibold">{r.item.name}</div>
                     <div className="text-xs text-muted tabular-nums">
-                      {r.item.online ? '시간 없음 (온라인 강의)' : `${r.item.days.join('·')} ${r.item.start}–${r.item.end}`}{r.item.place ? ` · ${r.item.place}` : ''}
+                      {r.item.online ? '시간 없음 (온라인 강의)' : `${r.item.days.join('·')} ${r.item.start}–${r.item.end || '?'}`}{r.item.place ? ` · ${r.item.place}` : ''}
                     </div>
                     {r.item.needsTimeCheck && !r.item.online && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -288,7 +289,7 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
                           : '한 AI만 읽은 과목이에요. 캡처에 실제로 있는지 확인해 주세요.'}
                       </div>
                     )}
-                    {note && <div className={`text-[11px] ${chk?.tone === 'warn' || chk?.tone === 'error' ? 'text-warn' : 'text-faint'}`}>{note}</div>}
+                    {note && <div className={`text-[11px] ${chk?.tone === 'warn' || chk?.tone === 'error' || (r.item.endUnknown && !r.item.end) ? 'text-warn' : 'text-faint'}`}>{note}</div>}
                   </div>
                 </div>
               );

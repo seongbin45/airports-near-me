@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agreementCounts, crossCheck, normalizeBlocks, normTime, safeSnap, type EtItem } from '../everytime/items';
+import { agreementCounts, crossCheck, markCutOff, normalizeBlocks, normTime, safeSnap, type EtItem } from '../everytime/items';
 
 // 에브리타임 가져오기의 공통 정리 규칙. 수업이 빠지거나 일찍 끝나게 잡히면 못 타는 편을 추천하므로
 // 시각은 안전한 쪽으로만 움직이고, 읽지 못한 블록은 사유와 함께 남긴다.
@@ -95,5 +95,33 @@ describe('crossCheck — 두 AI의 읽기 대조', () => {
     expect(r.map(i => [i.name, i.agreement])).toEqual([['A', 'single'], ['온라인', undefined]]);
     const r2 = crossCheck([it_('온라인', [], '', '', true)], [it_('온라인', [], '', '', true), it_('A', ['월'], '09:00', '10:00')]);
     expect(r2.filter(i => i.online)).toHaveLength(1);
+  });
+});
+
+// 실제 캡처(2026-09-27)에서: 목 16:10 수업의 아래가 캡처 밖으로 잘렸는데 AI가 화면 끝 시각 17:00을 종료로 적었다.
+// 종료가 실제보다 이르면 출발 가능 창이 넓어진다(피해 방향) — 끝을 모르는 채로 두고 사용자가 채우게 한다.
+describe('markCutOff — 캡처 아래에서 잘린 블록', () => {
+  const blk = (end: string, cut_off = false) => ({ name: '생명과학의이해', place: '인문관-11', day: '목', start: '16:10', end, cut_off });
+
+  it('AI가 cut_off를 켜지 않아도 종료가 화면 끝 시각이면 잘린 것으로 본다', () => {
+    expect(markCutOff([blk('17:00')], '17:00')[0]).toMatchObject({ end: '', cutOff: true });
+    expect(markCutOff([blk('16:55')], '17:00')[0]).toMatchObject({ end: '', cutOff: true });
+  });
+
+  it('AI가 cut_off를 켜면 그대로 따른다, 화면 끝보다 충분히 이르면 그대로 둔다', () => {
+    expect(markCutOff([blk('17:00', true)], null)[0]).toMatchObject({ cutOff: true });
+    expect(markCutOff([blk('16:00')], '17:00')[0]).toEqual({ name: '생명과학의이해', place: '인문관-11', day: '목', start: '16:10', end: '16:00' });
+  });
+
+  it('잘린 블록은 빼지 않고 끝 모름(endUnknown)으로 남긴다', () => {
+    const { items, skipped } = normalizeBlocks(markCutOff([blk('17:00')], '17:00'), [], { needsTimeCheck: true });
+    expect(skipped).toEqual([]);
+    expect(items[0]).toMatchObject({ days: ['목'], start: '16:10', end: '', endUnknown: true, needsTimeCheck: true });
+  });
+
+  it('대조: 한쪽이라도 끝을 모르면 끝은 비워 둔다 (한 AI가 17:00을 지어내도 쓰지 않는다)', () => {
+    const known: EtItem = { name: '생명과학의이해', place: '', days: ['목'], start: '16:10', end: '17:00', online: false, needsTimeCheck: true };
+    const cut: EtItem = { ...known, end: '', endUnknown: true };
+    expect(crossCheck([known], [cut])[0]).toMatchObject({ end: '', endUnknown: true, agreement: 'both' });
   });
 });

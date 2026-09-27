@@ -8,7 +8,11 @@ import { DAYS, type Day } from '../onboarding/validate';
 import { toMin } from '../time';
 
 /** 한 요일의 수업 블록 하나 (에브리타임은 요일마다 블록을 따로 둔다) */
-export interface EtBlock { name: string; place: string; day: string; start: string; end: string }
+export interface EtBlock {
+  name: string; place: string; day: string; start: string; end: string;
+  /** 블록 아래 끝이 캡처 밖으로 잘림 — 끝나는 시각을 알 수 없다 (markCutOff) */
+  cutOff?: boolean;
+}
 
 /**
  * 두 AI가 같은 캡처를 읽은 결과를 대조한 표시 (CloneUp expiry_ocr의 두 엔진 일치 판정을 가져온 것)
@@ -29,6 +33,8 @@ export interface EtItem {
   online: boolean;
   /** 사람이 원본과 시각을 대조해야 하는 값인가 (캡처 인식) */
   needsTimeCheck: boolean;
+  /** 끝나는 시각을 캡처에서 알 수 없음(잘림). end는 빈 문자열이고 사용자가 채워야 고를 수 있다 */
+  endUnknown?: boolean;
 }
 
 export interface EtSkip { name: string; reason: string }
@@ -57,6 +63,17 @@ export function normalizeBlocks(
     if (!name) { skipped.push({ name: label, reason: '과목명이 없어요' }); continue; }
     if (day === '일') { skipped.push({ name, reason: '일요일 수업은 시간표에 넣을 수 없어요(월–토만). 그날은 일정으로 직접 넣어 주세요.' }); continue; }
     if (!(DAYS as readonly string[]).includes(day)) { skipped.push({ name, reason: `요일을 알 수 없어요(${day || '빈 값'})` }); continue; }
+    if (b.cutOff) {
+      // 끝이 잘린 블록은 빼면 안 된다 — 수업이 빠지면 출발 가능 창이 넓어진다. 시작만 살리고 끝은 사용자가 채운다.
+      if (!isHhmm(b.start)) { skipped.push({ name, reason: `시각 형식이 맞지 않아요(${b.start})` }); continue; }
+      const s0 = safeSnap(b.start, b.start).start;
+      if (toMin(s0) < EARLIEST || toMin(s0) > LATEST) { skipped.push({ name, reason: `06:00–23:55 밖의 시각이에요(${b.start})` }); continue; }
+      const key = [name, place, s0, '?'].join('|');
+      const cur = merged.get(key);
+      if (cur) { if (!cur.days.includes(day as Day)) cur.days.push(day as Day); }
+      else merged.set(key, { name, place, days: [day as Day], start: s0, end: '', online: false, needsTimeCheck: true, endUnknown: true });
+      continue;
+    }
     if (!isHhmm(b.start) || !isHhmm(b.end)) { skipped.push({ name, reason: `시각 형식이 맞지 않아요(${b.start}–${b.end})` }); continue; }
     const t = safeSnap(b.start, b.end);
     const a = toMin(t.start), z = toMin(t.end);
@@ -114,6 +131,11 @@ export function crossCheck(a: EtItem[], b: EtItem[] | null): EtItem[] {
     const j = rest.findIndex(y => slotKey(y) === slotKey(x));
     if (j < 0) { out.push({ ...x, agreement: 'one' }); continue; }
     const [y] = rest.splice(j, 1);
+    if (x.endUnknown || y.endUnknown) {
+      // 한쪽이라도 끝을 모르면 끝은 모르는 채로 둔다(사용자가 채운다). 시작은 이른 쪽.
+      out.push({ ...x, start: toMin(x.start) <= toMin(y.start) ? x.start : y.start, end: '', endUnknown: true, needsTimeCheck: true, agreement: x.start === y.start ? 'both' : 'differ', alt: x.start === y.start ? undefined : `${x.start} / ${y.start} 시작` });
+      continue;
+    }
     if (x.start === y.start && x.end === y.end) { out.push({ ...x, agreement: 'both' }); continue; }
     out.push({
       ...x,
@@ -137,4 +159,17 @@ export function crossCheck(a: EtItem[], b: EtItem[] | null): EtItem[] {
 export function agreementCounts(items: EtItem[]) {
   const n = (k: Agreement) => items.filter(i => i.agreement === k).length;
   return { both: n('both'), differ: n('differ'), one: n('one') };
+}
+
+/**
+ * 캡처 아래 끝에서 잘린 블록을 표시한다. AI의 cut_off 표시만 믿지 않고 코드로도 본다:
+ * 끝나는 시각이 캡처에 보이는 마지막 시각(visibleUntil)과 같거나 그 뒤면 잘린 것으로 본다.
+ * (실제 캡처에서 16:10 수업의 아래가 잘렸는데 AI가 화면 끝 시각 17:00을 종료로 적은 사례 — 2026-09-27)
+ */
+export function markCutOff(blocks: (EtBlock & { cut_off?: boolean })[], visibleUntil: string | null): EtBlock[] {
+  const edge = visibleUntil && isHhmm(visibleUntil) ? toMin(visibleUntil) : null;
+  return blocks.map(({ cut_off, ...b }) => {
+    const atEdge = edge != null && isHhmm(b.end) && toMin(b.end) >= edge - 5;
+    return cut_off || atEdge ? { ...b, end: '', cutOff: true } : b;
+  });
 }

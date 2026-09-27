@@ -20,7 +20,7 @@
 | 에브리타임 XML 시각 = 5분 단위 정수(`starttime×5`분) | `lib/everytime/xml.ts` `slot` | every2cal·linker 두 구현 일치 | 위와 같은 실측 |
 | 공유 시간표 XML 요청이 사용자 브라우저(에브리타임 페이지)에서 CORS로 허용되는지, 쿠키가 필요한지 | `lib/everytime/bookmarklet.ts` | 모름 — 기본(same-origin) 실패 시 `include`로 한 번 더 | 북마클릿 실측 |
 | 학기 표시(`<table year semester>`) | `lib/everytime/xml.ts` | 속성 이름 추정 — 없으면 "에브리타임 시간표"로 표시 | 북마클릿 실측 |
-| 시간표 캡처 인식 정확도 | `lib/ai/timetable.ts` | 비전 모델의 위치→수치 오차 평균 6% 안팎(ExChart, CHI'26) — 모든 항목에 "시각 확인" 필수 | 실제 캡처(월–금, 월–토)로 제공자별 대조 |
+| 시간표 캡처 인식 정확도 | `lib/ai/timetable.ts` | 비전 모델의 위치→수치 오차 평균 6% 안팎(ExChart, CHI'26) — 모든 항목에 "시각 확인" 필수. 실제 캡처 1장(월–토, 2026-09-27): GPT-5.5·Gemini 3.7 Flash 둘 다 보이는 블록 9개의 시작·종료를 손으로 읽은 값과 같게 읽음. 아래가 잘린 블록 1개는 처음에 화면 끝 시각을 종료로 지어냄 → 끝 모름 처리로 고침 | 캡처를 더 모아(월–금, 저녁 수업, 작은 화면) 제공자별 대조 |
 
 ## 확인됨
 
