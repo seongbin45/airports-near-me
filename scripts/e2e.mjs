@@ -43,7 +43,9 @@ async function login(page) {
   await page.waitForURL('**/login');
   await page.fill('input[type=email]', process.env.DEV_TEST_EMAIL);
   await page.fill('input[type=password]', process.env.DEV_TEST_PASSWORD);
-  await page.click('text=(개발용) 비밀번호로 로그인');
+  // 일반 이메일·비밀번호 로그인을 쓴다. '(개발용)' 버튼은 NODE_ENV가 production이 아닐 때만 보이는데,
+  // CI는 build → start(production)로 돌아서 그 버튼이 없다.
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
 }
 
 async function chatFlow(page, tag) {
