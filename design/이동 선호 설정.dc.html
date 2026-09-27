@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+</style>
+</helmet>
+<div style="min-height:100dvh;display:flex;flex-direction:column;background:#f6f1ea">
+  <header style="flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;border-bottom:1px solid #e8dfd4;background:#fbf8f4">
+    <a href="내 데이터.dc.html" style="flex:none;min-height:44px;padding:0 12px;border-radius:22px;display:flex;align-items:center;color:#2b2622;text-decoration:none;font-size:14px;font-weight:600">← 내 데이터</a>
+    <div style="font-weight:700;font-size:16px;flex:1">이동 선호 설정</div>
+    <div style="flex:none;font-size:12px;color:{{ savedInk }}">{{ savedLabel }}</div>
+  </header>
+
+  <main style="flex:1;padding:20px 16px 32px;display:flex;justify-content:center">
+    <div style="width:100%;max-width:600px;display:flex;flex-direction:column;gap:22px">
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:15px;font-weight:700">공항까지 이동 방법</div>
+          <div style="font-size:12px;color:#7a7067">추천 결과의 총 소요시간을 이 방법으로 계산해요.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+          <sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
+            <button onClick="{{ m.onClick }}" style="min-height:72px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;padding:10px 14px;border-radius:14px;border:{{ m.border }};background:{{ m.bg }};font:inherit;text-align:left;cursor:pointer;color:#2b2622">
+              <div style="font-size:14px;font-weight:700">{{ m.label }}</div>
+              <div style="font-size:12px;color:{{ m.noteInk }}">{{ m.note }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:15px;font-weight:700">공항 도착 여유 시간</div>
+            <div style="font-size:12px;color:#7a7067">출발 몇 분 전에 공항에 도착할지 정해요.</div>
+          </div>
+          <div style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;color:#2f62c4">{{ buffer }}분</div>
+        </div>
+        <input type="range" min="20" max="120" step="5" value="{{ buffer }}" onChange="{{ onBuffer }}" style="width:100%;accent-color:#2f62c4;height:28px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ bufPresets }}" as="b" hint-placeholder-count="4">
+            <button onClick="{{ b.onClick }}" style="min-height:36px;padding:0 12px;border-radius:18px;border:{{ b.border }};background:{{ b.bg }};color:{{ b.color }};font:inherit;font-size:12px;font-weight:600;cursor:pointer">{{ b.label }}</button>
+          </sc-for>
+        </div>
+        <sc-if value="{{ bufWarn }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:12px;line-height:1.5;color:#b0472a;background:#f8e3dc;border-radius:10px;padding:8px 10px;text-wrap:pretty">{{ bufWarn }}</div>
+        </sc-if>
+        <button onClick="{{ toggleBag }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:0 14px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;cursor:pointer;color:#2b2622;text-align:left">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:14px;font-weight:600">부칠 짐이 있으면 20분 더</div>
+            <div style="font-size:12px;color:#7a7067">대화에서 "짐 있음"을 고른 여정에만 더해요.</div>
+          </div>
+          <div style="flex:none;width:44px;height:26px;border-radius:13px;background:{{ bagTrack }};position:relative">
+            <div style="position:absolute;top:3px;left:{{ bagKnob }};width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)"></div>
+          </div>
+        </button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:15px;font-weight:700">선호 항공사</div>
+          <div style="font-size:12px;color:#7a7067">총 소요시간이 10분 안쪽으로 비슷하면 고른 항공사를 먼저 보여줘요. 다른 항공사를 빼지는 않아요.</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ airlines }}" as="a" hint-placeholder-count="8">
+            <button onClick="{{ a.onClick }}" style="min-height:44px;padding:0 14px;border-radius:22px;border:{{ a.border }};background:{{ a.bg }};color:{{ a.color }};font:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
+              <div style="font-size:11px;font-weight:700;letter-spacing:.04em;opacity:.7">{{ a.code }}</div>{{ a.name }}
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:15px;font-weight:700">추천에서 뺄 공항</div>
+          <div style="font-size:12px;color:#7a7067">거주지에서 가까운 순서예요. 뺀 공항은 결과에 나오지 않아요.</div>
+        </div>
+        <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;display:flex;flex-direction:column">
+          <sc-for list="{{ airports }}" as="p" hint-placeholder-count="4">
+            <button onClick="{{ p.onClick }}" style="display:flex;align-items:center;gap:12px;min-height:56px;padding:0 16px;border:none;border-top:{{ p.divider }};background:transparent;font:inherit;text-align:left;cursor:pointer;color:#2b2622">
+              <div style="flex:none;width:40px;font-size:13px;font-weight:700;letter-spacing:.04em;color:{{ p.codeInk }}">{{ p.code }}</div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <div style="font-size:14px;font-weight:600;color:{{ p.nameInk }}">{{ p.name }}</div>
+                <div style="font-size:12px;color:#7a7067">{{ p.access }}</div>
+              </div>
+              <div style="flex:none;font-size:12px;font-weight:600;color:{{ p.stateInk }}">{{ p.state }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#efe7dc;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:700;color:#5d544c">10/9(금) 김포 → 제주 KE1237에 적용하면</div>
+        <div style="font-size:14px;line-height:1.55;font-variant-numeric:tabular-nums">{{ preview }}</div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { mode: 'car', buffer: 40, bag: true, airlines: ['KE'], excluded: [], dirty: false };
+
+  up(p) { this.setState({ ...p, dirty: true }); clearTimeout(this.t); this.t = setTimeout(() => this.setState({ dirty: false }), 700); }
+  componentWillUnmount() { clearTimeout(this.t); }
+
+  renderVals() {
+    const s = this.state, pill = on => ({ border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#2b2622' });
+    const ACC = { GMP: [80, null], CJJ: [58, null], ICN: [94, null], YNY: [175, null] };
+    const acc = code => s.mode === 'transit' ? null : ACC[code][0];
+    const fmt = m => `${Math.floor(m / 60) ? Math.floor(m / 60) + '시간 ' : ''}${String(m % 60).padStart(2, '0')}분`;
+    const t = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const buf = s.buffer + (s.bag ? 20 : 0), a = acc('GMP');
+    const preview = s.excluded.includes('GMP') ? '김포를 뺐기 때문에 이 편은 추천에 나오지 않아요.'
+      : a == null ? '대중교통 이동 시간 데이터가 아직 없어서 나갈 시각을 계산할 수 없어요.'
+      : `공항 ${t(18 * 60 + 10 - buf)} 도착, 집에서 ${t(18 * 60 + 10 - buf - a)} 출발 (이동 ${fmt(a)} · 여유 ${buf}분${s.bag ? ', 짐 포함' : ''})`;
+    return {
+      savedLabel: s.dirty ? '저장 중…' : '자동 저장됨', savedInk: s.dirty ? '#7a7067' : '#2d6a3a',
+      modes: [['car', '차량', '카카오모빌리티 · 시각대별'], ['transit', '대중교통', '데이터 준비 중 · ODsay'], ['auto', '둘 다 비교', '빠른 쪽으로 계산']].map(([id, label, note]) => {
+        const on = s.mode === id; return { label, note, onClick: () => this.up({ mode: id }), border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa', noteInk: id === 'transit' ? '#9a5a1e' : '#7a7067' }; }),
+      buffer: s.buffer, onBuffer: e => this.up({ buffer: Number(e.target.value) }),
+      bufPresets: [[30, '30분 · 짐 없이'], [40, '40분 · 기본'], [60, '60분 · 연휴'], [90, '90분 · 넉넉히']].map(([v, label]) => ({ label, ...pill(s.buffer === v), onClick: () => this.up({ buffer: v }) })),
+      bufWarn: s.buffer < 30 ? `국내선 탑승 마감은 보통 출발 20분 전이에요. ${s.buffer}분이면 보안검색이 붐빌 때 놓칠 수 있어요.` : '',
+      toggleBag: () => this.up({ bag: !s.bag }), bagTrack: s.bag ? '#2f62c4' : '#d8cec2', bagKnob: s.bag ? '21px' : '3px',
+      airlines: [['KE', '대한항공'], ['OZ', '아시아나'], ['7C', '제주항공'], ['LJ', '진에어'], ['TW', '티웨이'], ['BX', '에어부산'], ['RS', '에어서울'], ['ZE', '이스타']].map(([code, name]) => {
+        const on = s.airlines.includes(code); return { code, name, ...pill(on), onClick: () => this.up({ airlines: on ? s.airlines.filter(x => x !== code) : [...s.airlines, code] }) }; }),
+      airports: [['CJJ', '청주공항'], ['GMP', '김포공항'], ['ICN', '인천공항'], ['YNY', '양양공항']].map(([code, name], i) => {
+        const ex = s.excluded.includes(code), m = acc(code);
+        return { code, name, divider: i ? '1px solid #f1eae1' : 'none', access: m == null ? '대중교통 시간 없음' : `집에서 차량 ${fmt(m)}`,
+          state: ex ? '빼기됨' : '추천에 포함', stateInk: ex ? '#b0472a' : '#2d6a3a', codeInk: ex ? '#b0a598' : '#7a7067', nameInk: ex ? '#a39889' : '#2b2622',
+          onClick: () => this.up({ excluded: ex ? s.excluded.filter(x => x !== code) : [...s.excluded, code] }) }; }),
+      preview
+    };
+  }
+}
+</script>
+</body>
+</html>

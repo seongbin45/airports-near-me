@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+</style>
+</helmet>
+<div style="min-height:100dvh;display:flex;flex-direction:column;background:#f6f1ea">
+  <header style="flex:none;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid #e8dfd4;background:#fbf8f4">
+    <div style="width:36px;height:36px;border-radius:12px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px">공</div>
+    <div style="font-weight:700;font-size:16px;flex:1">내 여정</div>
+    <a href="공항 찾기 대화.dc.html" style="flex:none;min-height:44px;padding:0 16px;border-radius:22px;background:#2f62c4;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;text-decoration:none">새 여정 찾기</a>
+  </header>
+
+  <main style="flex:1;padding:20px 16px 32px;display:flex;justify-content:center">
+    <div style="width:100%;max-width:720px;display:flex;flex-direction:column;gap:20px">
+
+      <sc-if value="{{ hasNext }}" hint-placeholder-val="{{ true }}">
+        <a href="출발 당일.dc.html" style="display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:20px;background:#2f62c4;color:#fff;text-decoration:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:13px;font-weight:600;opacity:.9">다음 출발 · {{ nextDday }}</div>
+            <div style="font-size:12px;font-weight:600;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:10px">출발 당일 안내 →</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:26px;font-weight:800;letter-spacing:-.01em">김포 → 제주</div>
+              <div style="font-size:14px;opacity:.9;font-variant-numeric:tabular-nums">10월 9일(금) · KE1237 18:10 출발</div>
+            </div>
+            <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+              <div style="font-size:12px;opacity:.85">집에서 나갈 시각</div>
+              <div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">16:10</div>
+            </div>
+          </div>
+          <div style="font-size:12px;opacity:.85">고향 방문 · 추석 연휴 뒤 가족 모임</div>
+        </a>
+      </sc-if>
+
+      <div style="display:flex;gap:6px;background:#efe7dc;padding:4px;border-radius:14px;align-self:flex-start">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+          <button onClick="{{ t.onClick }}" style="min-height:40px;padding:0 16px;border-radius:11px;border:none;background:{{ t.bg }};color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer;box-shadow:{{ t.shadow }};white-space:nowrap">{{ t.label }}</button>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ trips }}" as="tr" hint-placeholder-count="3">
+          <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:14px;align-items:flex-start">
+              <div style="flex:none;width:52px;display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0;border-radius:12px;background:{{ tr.dateBg }}">
+                <div style="font-size:11px;color:#7a7067">{{ tr.month }}</div>
+                <div style="font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1">{{ tr.day }}</div>
+                <div style="font-size:11px;color:#7a7067">{{ tr.dow }}</div>
+              </div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <div style="font-size:16px;font-weight:700">{{ tr.route }}</div>
+                  <div style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;color:{{ tr.badgeInk }};background:{{ tr.badgeBg }}">{{ tr.badge }}</div>
+                </div>
+                <div style="font-size:13px;color:#5d544c;font-variant-numeric:tabular-nums">{{ tr.flight }}</div>
+                <div style="font-size:12px;color:#7a7067">{{ tr.reason }}</div>
+              </div>
+            </div>
+            <sc-if value="{{ tr.warn }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:12px;line-height:1.5;color:#9a5a1e;background:#fbeedd;border-radius:10px;padding:8px 10px;text-wrap:pretty">{{ tr.warn }}</div>
+            </sc-if>
+            <sc-if value="{{ tr.hasActions }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ tr.actions }}" as="a" hint-placeholder-count="2">
+                  <button onClick="{{ a.onClick }}" style="min-height:40px;padding:0 14px;border-radius:20px;border:{{ a.border }};background:{{ a.bg }};color:{{ a.color }};font:inherit;font-size:13px;font-weight:600;cursor:pointer">{{ a.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+        <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:24px 16px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+            <div style="font-size:15px;font-weight:600">{{ emptyTitle }}</div>
+            <div style="font-size:13px;color:#7a7067;line-height:1.5">{{ emptySub }}</div>
+          </div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ showPastNote }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:#7a7067;line-height:1.55;padding:0 4px;text-wrap:pretty">[다녀왔어요]를 누른 여정만 방문 기록에 들어가고, 다음 추천의 "지난번엔 이 공항에서 출발하셨어요"에 쓰여요.</div>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tab: 'upcoming', trips: [
+    { id: 1, st: 'upcoming', date: '2026-10-09', route: '김포 → 제주', flight: 'KE1237 · 18:10 출발 · 19:15 도착', reason: '고향 방문 · 추석 연휴 뒤 가족 모임' },
+    { id: 2, st: 'upcoming', date: '2026-10-17', route: '청주 → 부산', flight: '7C852 · 08:40 출발 · 09:35 도착', reason: '네트워킹 참여 · 부산 스타트업 밋업', changed: '스케줄이 바뀌었어요. 출발 08:25 → 08:40 (9/27 동기화). 나갈 시각도 15분 늦춰졌어요.' },
+    { id: 3, st: 'awaiting', date: '2026-11-06', route: '김포 → 제주', flight: '편 미정 · 스케줄 공개되면 알림', reason: '현장 강의 수강' },
+    { id: 4, st: 'past', date: '2026-09-12', route: '김포 → 제주', flight: 'OZ8931 · 17:10 출발', reason: '고향 방문 · 추석' },
+    { id: 5, st: 'past', date: '2026-08-22', route: '청주 → 제주', flight: 'LJ563 · 10:05 출발', reason: '방문 이유 없음', confirmed: true }
+  ] };
+
+  renderVals() {
+    const s = this.state, set = p => this.setState(p);
+    const TODAY = new Date(2026, 8, 27);
+    const upd = (id, p) => this.setState(st => ({ trips: st.trips.map(t => t.id === id ? { ...t, ...p } : t) }));
+    const del = id => this.setState(st => ({ trips: st.trips.filter(t => t.id !== id) }));
+    const ofTab = t => s.tab === 'upcoming' ? t.st === 'upcoming' || t.st === 'awaiting' : t.st === s.tab;
+    const btn = (label, onClick, primary) => ({ label, onClick, border: primary ? 'none' : '1px solid #e2d8cc', bg: primary ? '#2f62c4' : '#fffdfa', color: primary ? '#fff' : '#2b2622' });
+
+    const list = s.trips.filter(ofTab).sort((a, b) => s.tab === 'past' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date));
+    const trips = list.map(t => {
+      const [y, m, d] = t.date.split('-').map(Number), dt = new Date(y, m - 1, d);
+      const dd = Math.round((dt - TODAY) / 86400000);
+      let badge = `D-${dd}`, badgeInk = '#1f4a9c', badgeBg = '#e8eefa', actions = [];
+      if (t.st === 'awaiting') { badge = '스케줄 대기'; badgeInk = '#9a5a1e'; badgeBg = '#fbeedd'; actions = [btn('알림 끄기', () => upd(t.id, { st: 'upcoming', flight: '편 미정' })), btn('삭제', () => del(t.id))]; }
+      else if (t.st === 'upcoming') actions = [btn('편 상세', () => {}, !t.changed), ...(t.changed ? [btn('바뀐 내용 확인', () => upd(t.id, { changed: '' }), true)] : []), btn('삭제', () => del(t.id))];
+      else if (t.confirmed) { badge = '방문 기록됨'; badgeInk = '#2d6a3a'; badgeBg = '#e0efe0'; }
+      else { badge = '확인 대기'; badgeInk = '#9a5a1e'; badgeBg = '#fbeedd';
+        actions = [btn('다녀왔어요', () => upd(t.id, { confirmed: true }), true), btn('안 갔어요', () => del(t.id))]; }
+      return { route: t.route, flight: t.flight, reason: t.reason, month: `${m}월`, day: d, dow: '일월화수목금토'[dt.getDay()],
+        dateBg: t.st === 'past' ? '#f3ece3' : '#e8eefa', badge, badgeInk, badgeBg, warn: t.changed || '', actions, hasActions: actions.length > 0 };
+    });
+
+    const next = s.trips.filter(t => t.st === 'upcoming').sort((a, b) => a.date.localeCompare(b.date))[0];
+    const count = st => s.trips.filter(t => st === 'upcoming' ? t.st === 'upcoming' || t.st === 'awaiting' : t.st === st).length;
+    const pending = s.trips.filter(t => t.st === 'past' && !t.confirmed).length;
+    return {
+      hasNext: !!next && next.id === 1, nextDday: 'D-12',
+      tabs: [['upcoming', `다가오는 ${count('upcoming')}`], ['past', `지난 여정 ${count('past')}${pending ? ' · 확인 ' + pending : ''}`]].map(([id, label]) => ({ label, onClick: () => set({ tab: id }),
+        bg: s.tab === id ? '#fffdfa' : 'transparent', shadow: s.tab === id ? '0 1px 3px rgba(60,40,20,.12)' : 'none' })),
+      trips, empty: !trips.length,
+      emptyTitle: s.tab === 'past' ? '지난 여정이 없어요.' : '저장한 여정이 없어요.',
+      emptySub: s.tab === 'past' ? '다녀온 여정은 여기에서 확인하고 방문 기록으로 남길 수 있어요.' : '대화에서 편을 고르고 [이 편으로 여정 저장]을 누르면 여기에 모여요.',
+      showPastNote: s.tab === 'past'
+    };
+  }
+}
+</script>
+</body>
+</html>

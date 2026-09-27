@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+</style>
+</helmet>
+<div style="min-height:100dvh;display:flex;flex-direction:column;background:#f6f1ea">
+  <header style="flex:none;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 12px) 20px 12px;border-bottom:1px solid #e8dfd4;background:#fbf8f4">
+    <div style="width:36px;height:36px;border-radius:12px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px">공</div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="font-weight:700;font-size:16px">예외 상태 모음</div>
+      <div style="font-size:12px;color:#7a7067">대화 화면에서 데이터가 없거나 연결이 끊겼을 때</div>
+    </div>
+  </header>
+
+  <nav style="flex:none;display:flex;gap:8px;overflow-x:auto;padding:12px 16px;border-bottom:1px solid #e8dfd4;background:#fbf8f4;scrollbar-width:none">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+      <button onClick="{{ t.onClick }}" style="flex:none;min-height:40px;padding:0 14px;border-radius:20px;border:{{ t.border }};background:{{ t.bg }};color:{{ t.color }};font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px">
+        <div style="font-size:11px;font-variant-numeric:tabular-nums;opacity:.7">{{ t.n }}</div>{{ t.label }}
+      </button>
+    </sc-for>
+  </nav>
+
+  <sc-if value="{{ offlineBanner }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:{{ bannerBg }};border-bottom:1px solid {{ bannerLine }}">
+      <div style="flex:1;min-width:220px;font-size:13px;line-height:1.5;color:{{ bannerInk }};font-weight:600">{{ bannerText }}</div>
+      <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ reconnect }}" style="flex:none;min-height:36px;padding:0 14px;border-radius:18px;border:1px solid #d8cec2;background:#fffdfa;color:#2b2622;font:inherit;font-size:13px;font-weight:600;cursor:pointer">{{ reconnectLabel }}</button>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <main style="flex:1;padding:24px 16px 32px;display:flex;justify-content:center">
+    <div style="width:100%;max-width:980px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+      <div style="flex:1 1 420px;min-width:0;max-width:600px;display:flex;flex-direction:column;gap:16px">
+
+        <sc-for list="{{ userMsgs }}" as="u" hint-placeholder-count="1">
+          <div style="display:flex;justify-content:flex-end">
+            <div style="max-width:80%;background:#2f62c4;color:#fff;padding:10px 16px;border-radius:18px 18px 4px 18px;font-size:15px;line-height:1.5">{{ u }}</div>
+          </div>
+        </sc-for>
+
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="flex:none;width:30px;height:30px;border-radius:10px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">공</div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">
+            <div style="align-self:flex-start;max-width:100%;background:#fffdfa;border:1px solid #ece3d8;padding:12px 16px;border-radius:4px 18px 18px 18px;display:flex;flex-direction:column;gap:6px">
+              <div style="font-size:15px;line-height:1.55;font-weight:600;text-wrap:pretty">{{ botTitle }}</div>
+              <div style="font-size:13px;line-height:1.55;color:#5d544c;text-wrap:pretty">{{ botSub }}</div>
+            </div>
+
+            <sc-if value="{{ isUnpublished }}" hint-placeholder-val="{{ true }}">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#7a7067;font-variant-numeric:tabular-nums">
+                  <div>9/27(일) 오늘</div><div>10/24(토)</div><div style="color:#b0472a;font-weight:700">11/6(금)</div>
+                </div>
+                <div style="position:relative;height:10px;border-radius:5px;background:#efe7dc">
+                  <div style="position:absolute;left:0;top:0;bottom:0;width:66%;border-radius:5px;background:#2f62c4"></div>
+                  <div style="position:absolute;right:0;top:-3px;width:16px;height:16px;border-radius:50%;background:#fffdfa;border:3px solid #b0472a"></div>
+                </div>
+                <div style="font-size:12px;color:#7a7067;line-height:1.5">파란 구간만 운항 스케줄이 공개돼 있어요. 출처: 한국공항공사 정기 스케줄 · 국토교통부 TAGO (9/27 06:00 확인)</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isNoRoute }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;display:flex;flex-direction:column">
+                <sc-for list="{{ checked }}" as="c" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:{{ c.divider }}">
+                    <div style="flex:none;width:40px;font-size:13px;font-weight:700;letter-spacing:.04em;color:#7a7067">{{ c.code }}</div>
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <div style="font-size:14px;font-weight:600">{{ c.name }}</div>
+                      <div style="font-size:12px;color:#7a7067">집에서 {{ c.access }}</div>
+                    </div>
+                    <div style="flex:none;font-size:13px;font-weight:700;color:#9a9087">양양행 0편</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showCards }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-if value="{{ cardsNote }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12px;color:#9a5a1e;line-height:1.5;padding:0 4px">{{ cardsNote }}</div>
+                </sc-if>
+                <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
+                  <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;gap:12px;align-items:center;opacity:{{ c.opacity }}">
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                      <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+                        <div style="font-size:15px;font-weight:700">{{ c.airport }}</div>
+                        <div style="font-size:12px;color:#7a7067;font-variant-numeric:tabular-nums">{{ c.flight }} · {{ c.dep }} 출발</div>
+                      </div>
+                      <div style="font-size:12px;color:{{ c.accessColor }}">{{ c.access }}</div>
+                    </div>
+                    <div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+                      <div style="font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:{{ c.totalColor }}">{{ c.total }}</div>
+                      <div style="font-size:11px;color:#9a9087">{{ c.totalLabel }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isFail }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;gap:6px">
+                  <sc-for list="{{ attempts }}" as="a" hint-placeholder-count="3">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                      <div style="height:6px;border-radius:3px;background:{{ a.bg }}"></div>
+                      <div style="font-size:11px;color:#7a7067;font-variant-numeric:tabular-nums">{{ a.label }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ failInk }}">{{ failStatus }}</div>
+                <sc-if value="{{ canRetryNow }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ retryNow }}" style="align-self:flex-start;min-height:40px;padding:0 16px;border-radius:20px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:13px;font-weight:600;cursor:pointer">지금 다시 시도</button>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isAiBlocked }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;display:flex;flex-direction:column">
+                <sc-for list="{{ verifyRows }}" as="v" hint-placeholder-count="4">
+                  <div style="display:flex;gap:12px;align-items:center;padding:11px 16px;border-top:{{ v.divider }}">
+                    <div style="flex:none;width:52px;font-size:12px;color:#7a7067">{{ v.k }}</div>
+                    <div style="flex:1;min-width:0;font-size:13px;font-variant-numeric:tabular-nums">{{ v.detail }}</div>
+                    <div style="flex:none;font-size:12px;font-weight:700;color:{{ v.color }}">{{ v.result }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{ chips }}" as="c" hint-placeholder-count="2">
+                  <button onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" style="min-height:44px;padding:0 16px;border-radius:22px;border:{{ c.border }};background:{{ c.bg }};color:{{ c.color }};font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ c.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;background:#fffdfa;border:1px solid #e2d8cc;border-radius:26px;padding:6px 6px 6px 18px;opacity:{{ inputOpacity }}">
+          <div style="flex:1;font-size:15px;color:#9a9087">{{ inputPh }}</div>
+          <div style="flex:none;min-height:40px;padding:0 14px;border-radius:20px;background:#efe7dc;color:#5d544c;font-size:13px;font-weight:600;display:flex;align-items:center">AI로 요약</div>
+          <div style="flex:none;width:40px;height:40px;border-radius:50%;background:{{ sendBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700">↑</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ devNotes }}" hint-placeholder-val="{{ true }}">
+        <aside style="flex:0 1 320px;min-width:260px;display:flex;flex-direction:column;gap:12px;background:#efe7dc;border-radius:16px;padding:16px">
+          <div style="font-size:12px;font-weight:700;color:#5d544c;letter-spacing:.02em">개발 메모</div>
+          <sc-for list="{{ notes }}" as="n" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="font-size:11px;font-weight:700;color:#7a7067">{{ n.k }}</div>
+              <div style="font-size:13px;line-height:1.55;text-wrap:pretty">{{ n.v }}</div>
+            </div>
+          </sc-for>
+        </aside>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;devNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const BACKOFF = [5, 15, 45];
+
+class Component extends DCLogic {
+  state = { sel: 'unpublished', notify: false, online: false, reconnecting: false,
+    fail: { attempt: 1, left: BACKOFF[0], gaveUp: false }, useCached: false, manualAccess: false };
+
+  componentDidMount() { this.tick = setInterval(() => this.onTick(), 1000); }
+  componentWillUnmount() { clearInterval(this.tick); clearTimeout(this.rt); }
+
+  onTick() {
+    if (this.state.sel !== 'fail') return;
+    this.setState(s => {
+      const f = s.fail; if (f.gaveUp) return null;
+      if (f.left > 1) return { fail: { ...f, left: f.left - 1 } };
+      const next = f.attempt + 1;
+      return next > BACKOFF.length ? { fail: { ...f, left: 0, gaveUp: true } } : { fail: { attempt: next, left: BACKOFF[next - 1], gaveUp: false } };
+    });
+  }
+
+  chip(label, onClick, primary, disabled) {
+    return { label, onClick, disabled: !!disabled,
+      border: primary ? 'none' : '1px solid #e2d8cc', bg: disabled ? '#f1ebe2' : primary ? '#2f62c4' : '#fffdfa',
+      color: disabled ? '#a39889' : primary ? '#fff' : '#2b2622' };
+  }
+
+  renderVals() {
+    const s = this.state, set = p => this.setState(p);
+    const TABS = [['unpublished', '스케줄 미공개'], ['noroute', '운항편 없음'], ['noaccess', '이동 시간 없는 지역'], ['offline', '오프라인'], ['fail', '불러오기 실패'], ['aiblock', 'AI 요약 차단']];
+    const pick = id => {
+      clearTimeout(this.rt);
+      this.setState({ sel: id, notify: false, online: false, reconnecting: false, useCached: false, manualAccess: false, fail: { attempt: 1, left: BACKOFF[0], gaveUp: false } });
+    };
+    const baseCards = [
+      { airport: '김포', flight: 'KE1237', dep: '18:10', accessMin: 72, total: '3시간 05분' },
+      { airport: '청주', flight: '7C852', dep: '19:05', accessMin: 58, total: '3시간 20분' },
+      { airport: '인천', flight: 'LJ319', dep: '20:30', accessMin: 94, total: '4시간 15분' }
+    ];
+    const fmt = m => `${Math.floor(m / 60) ? Math.floor(m / 60) + '시간 ' : ''}${String(m % 60).padStart(2, '0')}분`;
+
+    let v = { userMsgs: [], chips: [], notes: [], showCards: false, cards: [], cardsNote: '', inputPh: '메시지를 입력하세요', inputOpacity: 1, sendBg: '#2f62c4' };
+
+    if (s.sel === 'unpublished') {
+      v = { ...v, userMsgs: ['제주', '11월 6일(금)'],
+        botTitle: '11월 6일 운항 스케줄은 아직 공개되지 않았어요.',
+        botSub: '지금 받은 스케줄은 10월 24일(토)까지예요. 추정한 편으로 추천하지 않고, 공개되면 알려드릴게요.',
+        chips: [this.chip(s.notify ? '알림 신청됨 · 공개되면 알려드려요' : '공개되면 알림 받기', () => set({ notify: !s.notify }), !s.notify),
+          this.chip('10월 24일 이전 날짜로 바꾸기', () => {})],
+        notes: [{ k: '발생 조건', v: '선택한 날짜 > 출처별 flight_schedules 최대 날짜. 두 출처 모두 없을 때만 이 상태, 하나라도 있으면 그 출처로 추천.' },
+          { k: '데이터', v: '공개 범위 끝 날짜는 sync_log의 마지막 성공 동기화에서 읽음. 동계 스케줄이 들어오면 자동으로 늘어남.' },
+          { k: '저장', v: '알림 신청은 trips에 status=\'awaiting_schedule\'로 저장, 동기화 직후 해당 날짜 편이 생기면 알림 발송(P3).' }] };
+    }
+    if (s.sel === 'noroute') {
+      v = { ...v, userMsgs: ['양양', '10월 9일(금)'],
+        botTitle: '가까운 공항 3곳에서 10월 9일 양양행 국내선이 없어요.',
+        botSub: '공개된 운항 스케줄(10월 24일까지) 기준이에요.',
+        checked: [['GMP', '김포공항', '1시간 12분'], ['CJJ', '청주공항', '58분'], ['ICN', '인천공항', '1시간 34분']].map(([code, name, access], i) => ({ code, name, access, divider: i ? '1px solid #f1eae1' : 'none' })),
+        chips: [this.chip('다른 날짜 보기', () => {}, true), this.chip('공항 범위 넓히기 (2시간 이내 5곳)', () => {}), this.chip('목적지 다시 입력', () => {})],
+        notes: [{ k: '발생 조건', v: '후보 공항(이동 시간 순 상위 3곳) × 목적지 공항 × 날짜로 flight_schedules 0건.' },
+          { k: '범위 넓히기', v: 'access_times에서 차량 120분 이내 공항으로 다시 조회. 그래도 0건이면 같은 문구에 공항 수만 바꿔 표시.' },
+          { k: '하지 않는 것', v: '다른 교통수단(KTX·버스) 추천이나 인근 목적지 추정은 DB에 근거가 없어 넣지 않음.' }] };
+    }
+    if (s.sel === 'noaccess') {
+      const manual = s.manualAccess;
+      v = { ...v, userMsgs: ['제주', '10월 9일(금)'],
+        botTitle: '인천 옹진군에서 공항까지 걸리는 시간 데이터가 아직 없어요.',
+        botSub: manual ? '직접 입력하신 시간으로 다시 계산했어요. 이 값은 내 데이터에 "직접 입력"으로 저장돼요.' : '카카오 길찾기에서 차량 경로를 찾지 못한 구역이에요. 편은 출발 시각 순으로 보여드릴게요.',
+        showCards: true,
+        cardsNote: manual ? '' : '총 소요시간을 계산할 수 없어서 출발 시각 순으로 정렬했어요.',
+        cards: baseCards.map(c => ({ ...c, opacity: 1,
+          access: manual ? `집 → 공항 ${fmt(c.accessMin + 60)} · 직접 입력` : '집 → 공항 시간 없음',
+          accessColor: manual ? '#7a7067' : '#9a5a1e',
+          total: manual ? c.total : '–', totalLabel: manual ? '총 소요' : '계산 불가', totalColor: manual ? '#2b2622' : '#b0a598' })),
+        chips: manual ? [this.chip('입력한 시간 고치기', () => set({ manualAccess: false }))]
+          : [this.chip('공항까지 시간 직접 입력', () => set({ manualAccess: true }), true), this.chip('상세 주소로 다시 계산', () => {})],
+        notes: [{ k: '발생 조건', v: 'profiles.region_id에 대한 access_times 행이 없음(차량·대중교통 모두). 옹진군·울릉군 같은 섬 구역에서 발생.' },
+          { k: '정렬', v: '총 소요시간 대신 출발 시각 오름차순. 카드의 총 소요 칸은 "계산 불가"로 비워 둠.' },
+          { k: '직접 입력', v: 'user_access_overrides(user_id, airport_id, minutes)에 저장, 추천 시 access_times보다 우선. 출처는 "직접 입력"으로 표시.' }] };
+    }
+    if (s.sel === 'offline') {
+      const on = s.online;
+      v = { ...v, userMsgs: ['제주', '10월 9일(금)'],
+        botTitle: on ? '최신 스케줄로 다시 불러왔어요.' : '9월 27일 14:20에 불러온 결과예요.',
+        botSub: on ? '저장된 결과와 비교해 바뀐 편은 없어요.' : '연결되면 최신 스케줄로 다시 확인할게요. 그전까지 새 검색과 AI 요약은 쓸 수 없어요.',
+        showCards: true,
+        cards: baseCards.map(c => ({ ...c, opacity: on ? 1 : .6, access: `집 → 공항 ${fmt(c.accessMin)}`, accessColor: '#7a7067', totalLabel: '총 소요', totalColor: '#2b2622' })),
+        inputPh: on ? '메시지를 입력하세요' : '연결되면 입력할 수 있어요', inputOpacity: on ? 1 : .5, sendBg: on ? '#2f62c4' : '#c9bfb3',
+        notes: [{ k: '감지', v: 'navigator.onLine과 online/offline 이벤트, 그리고 API 요청 실패(네트워크 오류)를 함께 봄.' },
+          { k: '캐시', v: '서비스 워커가 마지막 추천 결과 1건과 앱 화면만 캐시. 캐시 시각을 배너와 말풍선에 표시.' },
+          { k: '쓰기', v: '오프라인 중 입력·저장·AI 호출은 막고 대기열에 넣지 않음. 다시 연결되면 결과를 새로 조회해 달라진 편만 알려줌.' }] };
+    }
+    if (s.sel === 'fail') {
+      const f = s.fail;
+      if (s.useCached) {
+        v = { ...v, userMsgs: ['제주', '10월 9일(금)'],
+          botTitle: '9월 26일에 확인한 스케줄로 보여드려요.',
+          botSub: '하루 전 값이라 그 사이 바뀐 편이 있을 수 있어요. 새로 불러오면 다시 알려드릴게요.',
+          showCards: true, cardsNote: '스케줄 확인: 9/26 06:00 (1일 전)',
+          cards: baseCards.map(c => ({ ...c, opacity: 1, access: `집 → 공항 ${fmt(c.accessMin)}`, accessColor: '#7a7067', totalLabel: '총 소요', totalColor: '#2b2622' })),
+          chips: [this.chip('다시 불러오기', () => set({ useCached: false, fail: { attempt: 1, left: BACKOFF[0], gaveUp: false } }))] };
+      } else {
+        v = { ...v, userMsgs: ['제주', '10월 9일(금)'],
+          botTitle: '운항 정보를 불러오지 못했어요.',
+          botSub: f.gaveUp ? '세 번 시도했지만 한국공항공사 서버가 응답하지 않아요. 잠시 뒤 다시 시도하거나, 저장된 스케줄로 볼 수 있어요.' : '한국공항공사 서버가 응답하지 않아요. 잠시 뒤 자동으로 다시 시도할게요.',
+          chips: f.gaveUp ? [this.chip('9/26 확인 스케줄로 보기', () => set({ useCached: true }), true), this.chip('처음부터 다시 시도', () => set({ fail: { attempt: 1, left: BACKOFF[0], gaveUp: false } }))] : [] };
+      }
+      v.attempts = BACKOFF.map((sec, i) => {
+        const n = i + 1, done = n < f.attempt || f.gaveUp, cur = n === f.attempt && !f.gaveUp;
+        return { label: `${n}회 · ${sec}초 뒤`, bg: done ? '#d99a86' : cur ? '#2f62c4' : '#e2d8cc' };
+      });
+      v.failStatus = f.gaveUp ? '자동 재시도를 멈췄어요.' : `${f.attempt}번째 재시도까지 ${f.left}초`;
+      v.failInk = f.gaveUp ? '#b0472a' : '#2b2622';
+      v.canRetryNow = !f.gaveUp;
+      v.notes = [{ k: '발생 조건', v: '/api/recommend가 외부 API 5xx·타임아웃(8초)을 받았고 DB에 오늘 동기화된 편이 없음.' },
+        { k: '재시도', v: '5초 → 15초 → 45초 지수 백오프, 3회 후 중단. 공식 API 호출 한도를 지키는 용도이며, 429 응답은 Retry-After를 따름.' },
+        { k: '대체', v: '마지막 성공 동기화 편을 "확인 날짜"와 함께 표시. 7일 넘게 지난 값이면 대체하지 않고 이 화면에 머묾.' }];
+    }
+    if (s.sel === 'aiblock') {
+      v = { ...v, userMsgs: ['AI로 요약해 줘'],
+        botTitle: 'AI 요약이 DB 값과 맞지 않아 보여드리지 않았어요.',
+        botSub: '대신 확인된 값만 표로 보여드릴게요. 이 기록은 내 데이터 → AI 기록에서 볼 수 있어요.',
+        verifyRows: [['편명', '3개 중 2개 일치 · AI: KE1235 / DB: KE1237', '불일치', '#b0472a'], ['출발 시각', '3개 모두 일치', '일치', '#2d6a3a'], ['공항', '3곳 모두 일치', '일치', '#2d6a3a'], ['소요시간', '3개 모두 일치', '일치', '#2d6a3a']]
+          .map(([k, detail, result, color], i) => ({ k, detail, result, color, divider: i ? '1px solid #f1eae1' : 'none' })),
+        showCards: true,
+        cards: baseCards.map(c => ({ ...c, opacity: 1, access: `집 → 공항 ${fmt(c.accessMin)}`, accessColor: '#7a7067', totalLabel: '총 소요', totalColor: '#2b2622' })),
+        notes: [{ k: '발생 조건', v: 'lib/ai/verify.ts가 답에서 뽑은 편명·시각·공항·소요시간·날짜 중 하나라도 DB와 다름, 또는 검증 중 예외(fail-closed).' },
+          { k: '기록', v: 'ai_calls.verified=false, verify_detail에 항목별 일치 수와 불일치 값 저장. 사용자에게는 불일치 항목만 보여줌.' },
+          { k: '다시 요청', v: '같은 결과로 바로 재호출하지 않음. 사용자가 버튼을 다시 눌러야 새 호출.' }] };
+    }
+
+    const offline = s.sel === 'offline';
+    return {
+      ...v,
+      tabs: TABS.map(([id, label], i) => { const on = s.sel === id; return { label, n: String(i + 1).padStart(2, '0'), onClick: () => pick(id),
+        border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#2b2622' }; }),
+      isUnpublished: s.sel === 'unpublished', isNoRoute: s.sel === 'noroute', isFail: s.sel === 'fail' && !s.useCached, isAiBlocked: s.sel === 'aiblock',
+      checked: v.checked || [], attempts: v.attempts || [], verifyRows: v.verifyRows || [],
+      hasChips: v.chips.length > 0,
+      retryNow: () => this.setState(st => ({ fail: { ...st.fail, left: 1 } })),
+      offlineBanner: offline, isOffline: offline && !s.online,
+      bannerText: s.online ? '다시 연결됐어요.' : '인터넷에 연결되어 있지 않아요. 저장된 결과만 볼 수 있어요.',
+      bannerBg: s.online ? '#e0efe0' : '#fbeedd', bannerLine: s.online ? '#c5dfc5' : '#f0d9bd', bannerInk: s.online ? '#2d6a3a' : '#8a4617',
+      reconnectLabel: s.reconnecting ? '연결 확인 중…' : '다시 연결 시도',
+      reconnect: () => { if (s.reconnecting) return; set({ reconnecting: true }); this.rt = setTimeout(() => this.setState({ online: true, reconnecting: false }), 1200); },
+      devNotes: this.props.devNotes ?? true
+    };
+  }
+}
+</script>
+</body>
+</html>

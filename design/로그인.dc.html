@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+input::placeholder{color:#b0a598}
+</style>
+</helmet>
+<div style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px);background:#f6f1ea">
+  <div style="width:100%;max-width:420px;display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:14px">
+      <div style="width:48px;height:48px;border-radius:15px;background:#2f62c4;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px">공</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:24px;font-weight:800;letter-spacing:-.01em;line-height:1.3;text-wrap:pretty">{{ title }}</div>
+        <div style="font-size:14px;color:#5d544c;line-height:1.55;text-wrap:pretty">{{ sub }}</div>
+      </div>
+    </div>
+
+    <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ socials }}" as="so" hint-placeholder-count="4">
+          <button onClick="{{ so.onClick }}" disabled="{{ so.busy }}" style="min-height:52px;display:flex;align-items:center;gap:12px;padding:0 18px;border-radius:26px;border:{{ so.border }};background:{{ so.bg }};color:{{ so.ink }};font:inherit;font-size:15px;font-weight:700;cursor:pointer">
+            <div style="flex:none;width:24px;height:24px;border-radius:7px;background:{{ so.markBg }};color:{{ so.markInk }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">{{ so.mark }}</div>
+            <div style="flex:1;text-align:center;margin-right:36px">{{ so.label }}</div>
+          </button>
+        </sc-for>
+        <sc-if value="{{ socialErr }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:12px;color:#b0472a;padding:0 4px;line-height:1.5">{{ socialErr }}</div>
+        </sc-if>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="flex:1;height:1px;background:#e2d8cc"></div>
+        <div style="font-size:12px;color:#9a9087">또는</div>
+        <div style="flex:1;height:1px;background:#e2d8cc"></div>
+      </div>
+
+      <div style="display:flex;gap:6px;background:#efe7dc;padding:4px;border-radius:14px">
+        <sc-for list="{{ methods }}" as="m" hint-placeholder-count="2">
+          <button onClick="{{ m.onClick }}" style="flex:1;min-height:40px;border-radius:11px;border:none;background:{{ m.bg }};color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer;box-shadow:{{ m.shadow }}">{{ m.label }}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ isPw }}" hint-placeholder-val="{{ false }}">
+        <form onSubmit="{{ onPwSubmit }}" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:6px">
+            <sc-for list="{{ pwModes }}" as="p" hint-placeholder-count="2">
+              <button type="button" onClick="{{ p.onClick }}" style="min-height:36px;padding:0 12px;border-radius:18px;border:{{ p.border }};background:{{ p.bg }};color:{{ p.color }};font:inherit;font-size:13px;font-weight:600;cursor:pointer">{{ p.label }}</button>
+            </sc-for>
+          </div>
+          <input autoComplete="username" value="{{ uid }}" onChange="{{ onUid }}" placeholder="{{ uidPh }}" style="min-height:52px;padding:0 16px;border-radius:14px;border:1px solid {{ uidBorder }};background:#fffdfa;font:inherit;font-size:16px;color:#2b2622;outline:none">
+          <sc-if value="{{ uidHint }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;color:{{ uidHintInk }};padding:0 4px">{{ uidHint }}</div>
+          </sc-if>
+          <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+            <input type="email" autoComplete="email" value="{{ suEmail }}" onChange="{{ onSuEmail }}" placeholder="이메일 (비밀번호 찾기에 써요)" style="min-height:52px;padding:0 16px;border-radius:14px;border:1px solid #e2d8cc;background:#fffdfa;font:inherit;font-size:16px;color:#2b2622;outline:none">
+          </sc-if>
+          <div style="display:flex;align-items:center;gap:0;border-radius:14px;border:1px solid {{ pwBorder }};background:#fffdfa;padding-right:6px">
+            <input type="{{ pwType }}" autoComplete="{{ pwAuto }}" value="{{ pw }}" onChange="{{ onPw }}" placeholder="비밀번호" style="flex:1;min-width:0;min-height:50px;padding:0 16px;border:none;background:transparent;font:inherit;font-size:16px;color:#2b2622;outline:none">
+            <button type="button" onClick="{{ togglePw }}" style="flex:none;min-height:40px;padding:0 10px;border-radius:10px;border:none;background:transparent;color:#5d544c;font:inherit;font-size:13px;cursor:pointer">{{ pwToggleLabel }}</button>
+          </div>
+          <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-wrap:wrap;gap:6px 12px;padding:0 4px">
+              <sc-for list="{{ pwRules }}" as="r" hint-placeholder-count="3">
+                <div style="font-size:12px;color:{{ r.ink }};display:flex;align-items:center;gap:4px">{{ r.mark }} {{ r.label }}</div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ pwErr }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;color:#b0472a;padding:0 4px;line-height:1.5">{{ pwErr }}</div>
+          </sc-if>
+          <button type="submit" disabled="{{ pwDisabled }}" style="min-height:52px;border-radius:26px;border:none;background:{{ pwBtnBg }};color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer">{{ pwBtnLabel }}</button>
+          <sc-if value="{{ isLoginMode }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;justify-content:center;gap:16px">
+              <button type="button" onClick="{{ findId }}" style="min-height:36px;border:none;background:transparent;color:#5d544c;font:inherit;font-size:13px;cursor:pointer">아이디 찾기</button>
+              <button type="button" onClick="{{ findPw }}" style="min-height:36px;border:none;background:transparent;color:#5d544c;font:inherit;font-size:13px;cursor:pointer">비밀번호 재설정</button>
+            </div>
+          </sc-if>
+        </form>
+      </sc-if>
+
+      <sc-if value="{{ isLink }}" hint-placeholder-val="{{ true }}">
+      <form onSubmit="{{ onSubmit }}" style="display:flex;flex-direction:column;gap:10px">
+        <sc-if value="{{ recoverNote }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:13px;line-height:1.55;color:#1f4a9c;background:#e8eefa;border-radius:12px;padding:10px 12px;text-wrap:pretty">{{ recoverNote }}</div>
+        </sc-if>
+        <input type="email" inputMode="email" autoComplete="email" value="{{ email }}" onChange="{{ onEmail }}" placeholder="이메일 주소" style="min-height:52px;padding:0 16px;border-radius:14px;border:1px solid {{ emailBorder }};background:#fffdfa;font:inherit;font-size:16px;color:#2b2622;outline:none">
+        <sc-if value="{{ emailErr }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:12px;color:#b0472a;padding:0 4px">{{ emailErr }}</div>
+        </sc-if>
+        <button type="submit" disabled="{{ sending }}" style="min-height:52px;border-radius:26px;border:none;background:{{ submitBg }};color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer">{{ submitLabel }}</button>
+        <div style="font-size:12px;color:#7a7067;line-height:1.55;padding:0 4px;text-wrap:pretty">비밀번호 없이 메일로 받은 링크로 로그인해요. 처음이면 그대로 가입돼요.</div>
+      </form>
+      </sc-if>
+      <div style="font-size:12px;color:#7a7067;line-height:1.55;padding:0 4px;text-wrap:pretty">계속하면 <a href="#">이용약관</a>과 <a href="#">개인정보 처리방침</a>에 동의하게 돼요. 어떤 방법으로 로그인해도 같은 이메일이면 한 계정으로 합쳐요.</div>
+    </sc-if>
+
+    <sc-if value="{{ isLinkAsk }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:12px;color:#7a7067">기존 계정</div>
+          <div style="font-size:15px;font-weight:700">minji@univ.ac.kr</div>
+          <div style="font-size:12px;color:#7a7067">이메일 링크로 가입 · 2026-09-24</div>
+        </div>
+        <button onClick="{{ onMerge }}" style="min-height:52px;border-radius:26px;border:none;background:#2f62c4;color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer">{{ mergeLabel }}</button>
+        <button onClick="{{ onChange }}" style="min-height:44px;border-radius:22px;border:none;background:transparent;color:#5d544c;font:inherit;font-size:14px;cursor:pointer">취소</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSent }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:16px;display:flex;flex-direction:column">
+          <sc-for list="{{ tips }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border-top:{{ t.divider }}">
+              <div style="flex:none;width:22px;height:22px;border-radius:50%;background:#e8eefa;color:#2f62c4;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ t.n }}</div>
+              <div style="font-size:14px;line-height:1.55;text-wrap:pretty">{{ t.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <button onClick="{{ onResend }}" disabled="{{ resendDisabled }}" style="min-height:48px;border-radius:24px;border:1px solid #e2d8cc;background:#fffdfa;color:{{ resendInk }};font:inherit;font-size:14px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums">{{ resendLabel }}</button>
+        <button onClick="{{ onChange }}" style="min-height:44px;border-radius:22px;border:none;background:transparent;color:#5d544c;font:inherit;font-size:14px;cursor:pointer">다른 이메일로 받기</button>
+        <sc-if value="{{ resentNote }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:12px;color:#2d6a3a;text-align:center">{{ resentNote }}</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isExpired }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button onClick="{{ onResend }}" style="min-height:52px;border-radius:26px;border:none;background:#2f62c4;color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer">새 링크 받기</button>
+        <button onClick="{{ onChange }}" style="min-height:44px;border-radius:22px;border:none;background:transparent;color:#5d544c;font:inherit;font-size:14px;cursor:pointer">다른 이메일로 받기</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLimited }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px;line-height:1.55;color:#9a5a1e;background:#fbeedd;border-radius:12px;padding:12px 14px;text-wrap:pretty">이미 보낸 메일이 있다면 그 링크를 먼저 써보세요. 스팸함도 확인해 주세요.</div>
+        <button onClick="{{ onChange }}" style="min-height:48px;border-radius:24px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font:inherit;font-size:14px;font-weight:600;cursor:pointer">처음으로</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+      <a href="{{ nextHref }}" style="min-height:52px;border-radius:26px;background:#2f62c4;color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;text-decoration:none">{{ nextLabel }}</a>
+    </sc-if>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding-top:10px;border-top:1px dashed #ddd2c4">
+      <div style="width:100%;text-align:center;font-size:11px;color:#9a9087">미리보기 상태</div>
+      <sc-for list="{{ states }}" as="x" hint-placeholder-count="5">
+        <button onClick="{{ x.onClick }}" style="min-height:32px;padding:0 10px;border-radius:16px;border:{{ x.border }};background:{{ x.bg }};color:{{ x.color }};font:inherit;font-size:11px;font-weight:600;cursor:pointer">{{ x.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const COOLDOWN = 60;
+
+class Component extends DCLogic {
+  state = { view: 'form', email: 'minji@univ.ac.kr', err: '', left: 0, sending: false, resent: '', isNew: true,
+    method: 'link', pwMode: 'login', uid: '', suEmail: '', pw: '', showPw: false, pwErr: '', fails: 0, social: '', socialErr: '', provider: '' };
+
+  PROVIDERS = [
+    { id: 'kakao', label: '카카오로 계속하기', name: '카카오', mark: 'K', bg: '#FEE500', ink: '#191600', markBg: 'transparent', markInk: '#191600', border: 'none' },
+    { id: 'naver', label: '네이버로 계속하기', name: '네이버', mark: 'N', bg: '#03C75A', ink: '#fff', markBg: 'transparent', markInk: '#fff', border: 'none' },
+    { id: 'google', label: 'Google로 계속하기', name: 'Google', mark: 'G', bg: '#fffdfa', ink: '#2b2622', markBg: 'transparent', markInk: '#4285F4', border: '1px solid #d8cec2' },
+    { id: 'apple', label: 'Apple로 계속하기', name: 'Apple', mark: 'A', bg: '#000', ink: '#fff', markBg: 'transparent', markInk: '#fff', border: 'none' }
+  ];
+
+  socialLogin(p) {
+    this.setState({ social: p.id, socialErr: '' });
+    clearTimeout(this.st);
+    this.st = setTimeout(() => {
+      if (p.id === 'google') return this.setState({ social: '', view: 'linkAsk', provider: p.name });
+      this.setState({ social: '', view: 'done', isNew: p.id === 'kakao', provider: p.name });
+    }, 900);
+  }
+
+  pwSubmit() {
+    const s = this.state;
+    if (s.pwMode === 'signup') {
+      clearTimeout(this.st); this.setState({ sending: true });
+      this.st = setTimeout(() => this.setState({ sending: false, view: 'done', isNew: true, provider: '아이디' }), 700);
+      return;
+    }
+    if (s.fails >= 4) return this.setState({ pwErr: '5번 틀려서 10분 동안 로그인을 막았어요. 비밀번호 재설정이나 이메일 링크로 로그인할 수 있어요.', fails: 5 });
+    if (s.pw !== 'airport2026!') return this.setState(st => ({ fails: st.fails + 1, pwErr: `아이디 또는 비밀번호가 맞지 않아요. (${st.fails + 1}/5)` }));
+    clearTimeout(this.st); this.setState({ sending: true });
+    this.st = setTimeout(() => this.setState({ sending: false, view: 'done', isNew: false, provider: '아이디', fails: 0 }), 700);
+  }
+
+  componentDidMount() { this.tk = setInterval(() => this.state.left > 0 && this.setState(s => ({ left: s.left - 1 })), 1000); }
+  componentWillUnmount() { clearInterval(this.tk); clearTimeout(this.st); }
+
+  send(resend) {
+    this.setState({ sending: true });
+    clearTimeout(this.st);
+    this.st = setTimeout(() => this.setState({ sending: false, view: 'sent', left: COOLDOWN, resent: resend ? '새 링크를 보냈어요. 이전 링크는 더 이상 쓸 수 없어요.' : '' }), 700);
+  }
+
+  renderVals() {
+    const s = this.state, set = p => this.setState(p);
+    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.email.trim());
+    const T = {
+      form: ['로그인하고 시작하기', '공항 추천에 쓰는 일정과 방문 기록을 계정에 안전하게 모아둬요.'],
+      sent: ['메일함을 확인해 주세요', `${s.email.trim()}로 로그인 링크를 보냈어요.`],
+      expired: ['링크가 만료됐어요', '로그인 링크는 1시간 동안, 한 번만 쓸 수 있어요.'],
+      limited: ['잠시 뒤 다시 시도해 주세요', '짧은 시간에 요청이 많아 메일 보내기를 잠시 멈췄어요. 약 1시간 뒤에 다시 받을 수 있어요.'],
+      done: [s.isNew ? '가입됐어요' : '다시 오셨네요', (s.provider && s.provider !== '아이디' ? `${s.provider} 계정으로 로그인했어요. ` : '') + (s.isNew ? '국가와 거주지부터 알려주시면 가까운 공항을 찾아드릴게요.' : '지난번에 저장한 일정과 여정을 불러왔어요.')],
+      linkAsk: ['이미 가입한 이메일이에요', `${s.provider} 계정의 이메일(minji@univ.ac.kr)로 가입된 계정이 있어요. 두 계정을 합치면 ${s.provider}로도 같은 데이터에 들어올 수 있어요.`]
+    }[s.view];
+    const signup = s.pwMode === 'signup', uidT = s.uid.trim();
+    const uidOk = /^[a-z0-9_]{4,20}$/.test(uidT) || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(uidT);
+    const suIdOk = /^[a-z0-9_]{4,20}$/.test(uidT);
+    const taken = signup && ['minji', 'admin', 'test'].includes(uidT);
+    const rules = [['8자 이상', s.pw.length >= 8], ['영문·숫자 포함', /[A-Za-z]/.test(s.pw) && /\d/.test(s.pw)], ['특수문자 포함', /[^A-Za-z0-9]/.test(s.pw)]];
+    const pwOk = signup ? rules.every(r => r[1]) && suIdOk && !taken && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.suEmail.trim()) : uidOk && s.pw.length > 0;
+    const locked = !signup && s.fails >= 5;
+    const pwDisabled = !pwOk || s.sending || locked;
+    const pill = on => ({ border: on ? '1.5px solid #2f62c4' : '1px solid #e2d8cc', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#2b2622' });
+    return {
+      socials: this.PROVIDERS.map(p => ({ ...p, busy: !!s.social, label: s.social === p.id ? `${p.name} 연결 중…` : p.label, onClick: () => this.socialLogin(p) })),
+      socialErr: s.socialErr,
+      methods: [['link', '이메일 링크'], ['pw', '아이디·비밀번호']].map(([id, label]) => ({ label, onClick: () => set({ method: id, pwErr: '', recover: '' }),
+        bg: s.method === id ? '#fffdfa' : 'transparent', shadow: s.method === id ? '0 1px 3px rgba(60,40,20,.12)' : 'none' })),
+      isPw: s.method === 'pw', isLink: s.method === 'link', isSignup: signup, isLoginMode: !signup,
+      pwModes: [['login', '로그인'], ['signup', '아이디로 가입']].map(([id, label]) => ({ label, ...pill(s.pwMode === id), onClick: () => set({ pwMode: id, pwErr: '', fails: 0 }) })),
+      uid: s.uid, onUid: e => set({ uid: e.target.value.toLowerCase(), pwErr: '' }),
+      uidBorder: taken ? '#d99a86' : '#e2d8cc',
+      uidHint: signup && uidT ? (taken ? '이미 쓰는 아이디예요.' : suIdOk ? '쓸 수 있는 아이디예요.' : '영문 소문자·숫자·밑줄 4~20자') : '',
+      uidHintInk: taken || (signup && uidT && !suIdOk) ? '#b0472a' : '#2d6a3a',
+      suEmail: s.suEmail, onSuEmail: e => set({ suEmail: e.target.value }),
+      pw: s.pw, onPw: e => set({ pw: e.target.value, pwErr: locked ? s.pwErr : '' }),
+      pwType: s.showPw ? 'text' : 'password', pwAuto: signup ? 'new-password' : 'current-password',
+      togglePw: () => set({ showPw: !s.showPw }), pwToggleLabel: s.showPw ? '숨기기' : '보기',
+      pwBorder: s.pwErr ? '#d99a86' : '#e2d8cc',
+      pwRules: rules.map(([label, ok]) => ({ label, mark: ok ? '✓' : '·', ink: ok ? '#2d6a3a' : '#9a9087' })),
+      pwErr: s.pwErr, pwDisabled, pwBtnBg: pwDisabled ? '#c9bfb3' : '#2f62c4',
+      pwBtnLabel: s.sending ? '확인 중…' : signup ? '가입하기' : '로그인',
+      onPwSubmit: e => { e.preventDefault(); if (!pwDisabled) this.pwSubmit(); },
+      findId: () => set({ method: 'link', pwErr: '', recover: 'id' }), findPw: () => set({ method: 'link', pwErr: '', recover: 'pw' }),
+      recoverNote: s.method !== 'link' ? '' : s.recover === 'id' ? '아이디 찾기: 가입할 때 넣은 이메일을 입력하면 아이디와 로그인 링크를 함께 보내드려요.' : s.recover === 'pw' ? '비밀번호 재설정: 가입할 때 넣은 이메일을 입력하면 새 비밀번호를 정하는 링크를 보내드려요.' : '',
+      uidPh: signup ? '아이디 (영문 소문자·숫자·밑줄 4~20자)' : '아이디 또는 이메일',
+      isLinkAsk: s.view === 'linkAsk', mergeLabel: `${s.provider || ''} 계정 연결하고 로그인`,
+      onMerge: () => set({ view: 'done', isNew: false }),
+      title: T[0], sub: T[1],
+      isForm: s.view === 'form', isSent: s.view === 'sent', isExpired: s.view === 'expired', isLimited: s.view === 'limited', isDone: s.view === 'done',
+      email: s.email, onEmail: e => set({ email: e.target.value, err: '' }),
+      emailErr: s.err, emailBorder: s.err ? '#d99a86' : '#e2d8cc',
+      sending: s.sending, submitBg: s.sending ? '#c9bfb3' : '#2f62c4', submitLabel: s.sending ? '보내는 중…' : '로그인 링크 받기',
+      onSubmit: e => { e.preventDefault(); if (!ok) return set({ err: '이메일 주소 형식을 확인해 주세요.' }); this.send(false); },
+      tips: ['메일의 [로그인] 버튼을 이 기기에서 눌러주세요. 다른 기기에서 열면 그 기기에서 로그인돼요.', '1~2분 안에 오지 않으면 스팸함이나 프로모션함을 확인해 주세요.', '학교 메일은 외부 메일이 늦게 올 수 있어요. 개인 메일도 쓸 수 있어요.']
+        .map((text, i) => ({ n: i + 1, text, divider: i ? '1px solid #f1eae1' : 'none' })),
+      resendDisabled: s.left > 0 || s.sending, resendInk: s.left > 0 ? '#9a9087' : '#2b2622',
+      resendLabel: s.sending ? '보내는 중…' : s.left > 0 ? `${s.left}초 뒤 다시 보낼 수 있어요` : '링크 다시 보내기',
+      onResend: () => this.send(true), resentNote: s.resent,
+      onChange: () => set({ view: 'form', resent: '', left: 0, provider: '' }),
+      nextHref: s.isNew ? '공항 찾기 시작하기.dc.html' : '공항 찾기 대화.dc.html', nextLabel: s.isNew ? '시작하기' : '대화로 가기',
+      states: [['form', '입력'], ['sent', '메일 보냄'], ['expired', '링크 만료'], ['limited', '발송 한도'], ['linkAsk', '계정 합치기'], ['done', '로그인 완료']].map(([id, label]) => { const on = s.view === id;
+        return { label, onClick: () => set({ view: id, left: id === 'sent' ? COOLDOWN : 0, resent: '', provider: id === 'linkAsk' ? 'Google' : '' }), border: on ? '1.5px solid #2f62c4' : '1px solid #d8cec2', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#5d544c' }; })
+    };
+  }
+}
+</script>
+</body>
+</html>
