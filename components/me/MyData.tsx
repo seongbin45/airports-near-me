@@ -405,7 +405,12 @@ export default function MyData(p: Props) {
                     ...(d?.flights?.mismatched ?? []), ...(d?.times?.mismatched ?? []), ...(d?.places?.mismatched ?? []),
                     ...(d?.durations?.mismatched ?? []), ...(d?.dates?.mismatched ?? []), ...(d?.forbidden ?? []),
                   ];
-                  const detail = c.verified
+                  // 시간표 캡처 인식은 문장 검증이 아니라 사실값 읽기다 — 편명·시각 대조 문구를 쓰지 않는다
+                  const image = c.kind === 'timetable_image';
+                  const detail = image
+                    ? d?.timetable ? `과목 ${d.timetable.items}개 읽음${d.timetable.skipped ? ` · ${d.timetable.skipped}개 제외` : ''} · 사용자가 확인한 과목만 저장`
+                      : d?.refused ? 'AI가 읽지 않음' : d?.parseError ? '형식이 맞지 않는 답' : 'AI 제공자 모두 응답 없음'
+                    : c.verified
                     ? `편명 ${d?.flights?.checked.length ?? 0}개 · 시각 ${d?.times?.checked.length ?? 0}개 DB와 일치`
                     : d?.refused ? 'AI가 답하지 않음 · 표로 대체'
                     : d?.parseError ? '형식이 맞지 않는 답 · 표로 대체'
@@ -417,7 +422,7 @@ export default function MyData(p: Props) {
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 text-sm font-semibold">{ask}</div>
                         <span className={`flex-none rounded-lg px-2 py-0.5 text-[11px] font-semibold ${c.verified ? 'bg-[#e0efe0] text-[#2d6a3a]' : 'bg-warn-soft text-warn'}`}>
-                          {c.verified ? '검증 통과' : '표시 안 함'}
+                          {image ? (c.verified ? '인식 완료' : '읽지 못함') : c.verified ? '검증 통과' : '표시 안 함'}
                         </span>
                       </div>
                       <div className="text-xs text-muted tabular-nums">

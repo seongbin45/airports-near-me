@@ -10,13 +10,31 @@ import { BOOKMARKLET } from '@/lib/everytime/bookmarklet';
 import { inputCls } from '@/components/ui';
 
 interface Row { item: EtItem; on: boolean; timeOk: boolean; note: string | null }
-interface Preview { semester: string | null; rows: Row[]; skipped: EtSkip[] }
+interface Preview { semester: string | null; rows: Row[]; skipped: EtSkip[]; imageUrl: string | null }
 type Msg = { text: string; kind: 'error' | 'warn' } | null;
 
 interface Props {
   supabase: SupabaseClient;
   classes: ClassItem[];
   setClasses: Dispatch<SetStateAction<ClassItem[]>>;
+}
+
+const IMAGE_GUIDE = [
+  '에브리타임 앱에서 시간표 화면을 캡처해요. 모든 과목과 왼쪽 시간 눈금이 보이게 해 주세요.',
+  '아래 [캡처 선택]으로 그 이미지를 골라요.',
+  'AI가 읽은 과목을 캡처와 한 줄씩 대조하고, 시각이 맞으면 [시각 확인]을 눌러요.',
+];
+
+/** 긴 변 1600px JPEG로 줄인다 — 전송량을 줄이고, 다시 그리면서 EXIF(촬영 정보)도 떨어진다 */
+async function shrinkImage(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bmp.width * scale);
+  canvas.height = Math.round(bmp.height * scale);
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close();
+  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
 const GUIDE = [
@@ -43,6 +61,8 @@ export function toRows(items: EtItem[], classes: ClassItem[]): Row[] {
  */
 export default function EverytimeImport({ supabase, classes, setClasses }: Props) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<'link' | 'image'>('link');
+  const [reading, setReading] = useState(false);
   const [paste, setPaste] = useState('');
   const [msg, setMsg] = useState<Msg>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -58,7 +78,33 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
     const r = parseTimetableXml(text);
     if (!r.ok) return setMsg({ text: r.error, kind: r.kind === 'link' ? 'warn' : 'error' });
     setMsg(null);
-    setPreview({ semester: r.semester, rows: toRows(r.items, classes), skipped: r.skipped });
+    setPreview({ semester: r.semester, rows: toRows(r.items, classes), skipped: r.skipped, imageUrl: null });
+  }
+
+  function closePreview() {
+    if (preview?.imageUrl) URL.revokeObjectURL(preview.imageUrl);
+    setPreview(null);
+  }
+
+  // 캡처 → 서버 라우트(AI 비전) → 미리보기. 저장은 여기서 사용자가 고른 과목만 한다.
+  async function readImage(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    input.value = ''; // 같은 파일을 다시 골라도 동작하게
+    if (!file) return;
+    setMsg(null); setReading(true);
+    try {
+      const base64 = await shrinkImage(file);
+      const res = await fetch('/api/import/everytime-image', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: base64, mediaType: 'image/jpeg' }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return setMsg({ text: json.error ?? '캡처를 읽지 못했어요.', kind: 'error' });
+      setPreview({ semester: json.semester ?? null, rows: toRows(json.items as EtItem[], classes), skipped: json.skipped ?? [], imageUrl: URL.createObjectURL(file) });
+    } catch {
+      setMsg({ text: '이미지를 읽을 수 없어요. PNG·JPEG 캡처를 골라 주세요.', kind: 'error' });
+    } finally {
+      setReading(false);
+    }
   }
 
   async function pasteFromClipboard() {
@@ -82,7 +128,7 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
     checks.push(r.item.online ? null : checkClass(toClass(r), [...classes, ...rows.filter((x, j) => j < i && picked(x, !!checks[j]?.ok)).map(toClass)]));
   });
   const chosen = rows.filter((r, i) => picked(r, !!checks[i]?.ok));
-  const setRow = (i: number, p: Partial<Row> & { item?: Partial<EtItem> }) => setPreview(pv => pv && ({
+  const setRow = (i: number, p: Partial<Omit<Row, 'item'>> & { item?: Partial<EtItem> }) => setPreview(pv => pv && ({
     ...pv, rows: pv.rows.map((x, j) => (j === i ? { ...x, ...p, item: { ...x.item, ...(p.item ?? {}) } } : x)),
   }));
 
@@ -97,7 +143,7 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
     setBusy(false);
     if (error) return setMsg({ text: `수업을 저장하지 못했어요: ${error.message}`, kind: 'error' });
     setClasses(cs => [...cs, ...insert.map((row, i) => ({ id: insertedId(data, i), name: row.name, place: row.place ?? '', days: row.days, start: row.start_time, end: row.end_time }))]);
-    setPreview(null); setPaste(''); setOpen(false);
+    closePreview(); setPaste(''); setOpen(false);
     setDone(`에브리타임에서 ${insert.length}과목을 시간표에 넣었어요. 블록을 눌러 고칠 수 있어요.`);
   }
 
@@ -118,6 +164,41 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
       </div>
 
       {open && !preview && (
+        <div className="flex gap-1.5 self-start rounded-[14px] bg-sand p-1" role="tablist">
+          {([['link', '공유 링크로'], ['image', '캡처로']] as const).map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setMsg(null); }}
+              className={`min-h-10 rounded-[11px] px-4 text-sm font-semibold whitespace-nowrap ${tab === id ? 'bg-surface shadow-[0_1px_3px_rgba(60,40,20,.12)]' : ''}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {open && !preview && tab === 'image' && (
+        <div className="flex flex-col gap-3">
+          <ol className="flex flex-col rounded-xl bg-[#faf6f0]">
+            {IMAGE_GUIDE.map((text, i) => (
+              <li key={i} className={`flex items-start gap-2.5 px-3 py-2.5 ${i ? 'border-t border-[#efe7dc]' : ''}`}>
+                <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-accent-soft text-[11px] font-bold text-accent">{i + 1}</span>
+                <span className="text-[13px] leading-normal text-pretty">{text}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className={`flex min-h-12 items-center rounded-[14px] bg-accent px-5 text-sm font-bold text-white focus-within:ring-2 focus-within:ring-accent-ink ${reading ? 'opacity-60' : 'cursor-pointer'}`}>
+              {reading ? '읽는 중…' : '캡처 선택'}
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={reading}
+                onChange={e => void readImage(e.currentTarget)} />
+            </label>
+            <button onClick={() => { setOpen(false); setMsg(null); }} className="min-h-12 rounded-[14px] px-3 text-[13px] text-muted">닫기</button>
+          </div>
+          <div className="text-[11px] leading-normal text-faint text-pretty">
+            캡처는 AI 제공자에게 보내 읽고 저장하지 않아요. AI는 시각을 틀리게 읽을 수 있어, 과목마다 캡처와 대조한 뒤 [시각 확인]을 눌러야 추가돼요.
+          </div>
+        </div>
+      )}
+
+      {open && !preview && tab === 'link' && (
         <div className="flex flex-col gap-3">
           <ol className="flex flex-col rounded-xl bg-[#faf6f0]">
             {GUIDE.map((text, i) => (
@@ -162,6 +243,15 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1 text-[13px] font-semibold text-ink-2">{preview.semester ?? '에브리타임 시간표'} · {chosen.length}과목 선택</div>
           </div>
+          {preview.imageUrl && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- 로컬 object URL이라 이미지 최적화 대상이 아니다 */}
+              <img src={preview.imageUrl} alt="올린 시간표 캡처" className="max-h-[360px] w-full rounded-xl border border-line object-contain" />
+              <div className="rounded-xl bg-warn-soft px-3 py-2.5 text-xs leading-normal text-warn text-pretty">
+                AI가 읽은 값이에요. 캡처와 시각을 한 줄씩 대조하고, 틀리면 고친 뒤 [시각 확인]을 눌러 주세요.
+              </div>
+            </>
+          )}
           <div className="flex flex-col rounded-xl border border-line">
             {rows.map((r, i) => {
               const chk = checks[i];
@@ -177,6 +267,20 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
                     <div className="text-xs text-muted tabular-nums">
                       {r.item.online ? '시간 없음 (온라인 강의)' : `${r.item.days.join('·')} ${r.item.start}–${r.item.end}`}{r.item.place ? ` · ${r.item.place}` : ''}
                     </div>
+                    {r.item.needsTimeCheck && !r.item.online && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <input type="time" step={300} value={r.item.start} aria-label={`${r.item.name} 시작 시각`}
+                          onChange={e => setRow(i, { item: { start: e.target.value } })} className={`${inputCls} min-h-10 w-[112px] py-1.5`} />
+                        <span className="text-xs text-muted">–</span>
+                        <input type="time" step={300} value={r.item.end} aria-label={`${r.item.name} 종료 시각`}
+                          onChange={e => setRow(i, { item: { end: e.target.value } })} className={`${inputCls} min-h-10 w-[112px] py-1.5`} />
+                        <label className="flex min-h-10 items-center gap-1.5 px-1 text-xs font-semibold">
+                          <input type="checkbox" className="h-4 w-4 accent-[var(--color-accent)]" checked={r.timeOk}
+                            onChange={e => setRow(i, { timeOk: e.target.checked })} />
+                          시각 확인
+                        </label>
+                      </div>
+                    )}
                     {note && <div className={`text-[11px] ${chk?.tone === 'warn' || chk?.tone === 'error' ? 'text-warn' : 'text-faint'}`}>{note}</div>}
                   </div>
                 </div>
@@ -190,7 +294,7 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
             </details>
           )}
           <div className="flex gap-2">
-            <button onClick={() => { setPreview(null); setOpen(true); }} className="min-h-12 flex-none rounded-full border border-line-strong bg-surface px-[18px] text-sm font-semibold text-ink-2">취소</button>
+            <button onClick={() => { closePreview(); setOpen(true); }} className="min-h-12 flex-none rounded-full border border-line-strong bg-surface px-[18px] text-sm font-semibold text-ink-2">취소</button>
             <button onClick={apply} disabled={!chosen.length || busy} className="min-h-12 flex-1 rounded-full bg-accent text-[15px] font-bold text-white disabled:bg-disabled">
               {busy ? '추가하는 중…' : chosen.length ? `${chosen.length}과목 시간표에 추가` : '추가할 과목을 골라주세요'}
             </button>
