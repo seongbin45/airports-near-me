@@ -39,12 +39,12 @@ RLS(행 수준 보안)는 **키에 따라 적용되느냐 마느냐가 갈린다
 | 테이블 | 내용 | 읽는 화면 | 쓰는 곳 | 지워지는 때 |
 |---|---|---|---|---|
 | `profiles` | 거주 지역·국가·사용자 유형·온보딩 진행·AI 사용 여부 | 온보딩, `/me`, 추천 | 온보딩, `/me` | 계정 삭제 |
-| `class_timetable` | 수업 시간표(`source`: manual·ics·google_calendar) | 온보딩(일정), 대화의 날짜 계획 | 온보딩, .ics 가져오기 | 계정 삭제 |
+| `class_timetable` | 수업 시간표(`source`: manual·ics·google_calendar·everytime) | 온보딩(일정), 대화의 날짜 계획 | 온보딩, .ics 가져오기, 에브리타임 불러오기 | 계정 삭제 |
 | `schedules` | 개인 일정 | 온보딩, `/me`, 대화의 날짜 계획 | 온보딩, 타임라인 가져오기, .ics 가져오기 | 계정 삭제 |
 | `visits` | 방문 기록 | `/me` | `/me`, `POST /api/visits`(확인), 타임라인 | **동의 철회 즉시** · 계정 삭제 |
 | `visit_candidates` | 타임라인에서 온 확인 대기 후보 | `/me` | 타임라인 가져오기 | 사용자가 "안 갔어요"(dismiss) · **동의 철회 즉시** · 계정 삭제 |
 | `trips` | 추천한 여정(고른 편·편명·출발/도착 시각) | `/me`(확인 대기) | `POST /api/recommend` | 계정 삭제 |
-| `ai_calls` | AI 호출 기록(프롬프트·응답·검증 결과·제공자·모델) | `/me`(AI 기록) | `POST /api/ai` | 계정 삭제 |
+| `ai_calls` | AI 호출 기록(프롬프트·응답·검증 결과·제공자·모델). `kind`: summary·question·timetable_image(시간표 캡처 인식 — 호출 제한도 이 행을 센다) | `/me`(AI 기록) | `POST /api/ai`, `POST /api/import/everytime-image` | 계정 삭제 |
 | `location_consents` | 위치정보 동의 이력(버전·동의 시각·철회 시각) | 온보딩, `/me` | 온보딩, `/me` | 계정 삭제 |
 
 동의 철회는 `public.revoke_location_consent()` 한 번으로 처리한다(`security invoker`, 한 트랜잭션): 동의 행의 `revoked_at` 기록, `visits`·`visit_candidates` 삭제. `trips`는 남긴다.
@@ -73,6 +73,7 @@ RLS(행 수준 보안)는 **키에 따라 적용되느냐 마느냐가 갈린다
 | `POST /api/recommend` | `profiles`, `access_times`, `airports`, `flight_schedules` | 서버(세션) |
 | `POST /api/visits` | `trips`, `visits`, `visit_candidates` | 서버(세션) |
 | `POST /api/ai` | `ai_calls` | 서버(세션) |
+| `POST /api/import/everytime-image` | `profiles`(ai_enabled), `ai_calls` — 이미지는 저장하지 않고 수업은 저장하지 않는다(미리보기만) | 서버(세션) |
 | `scripts/*` | 전부 | 서버 전용(service role) |
 
 ## 6. 계정 삭제가 지우는 것
