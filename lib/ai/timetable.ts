@@ -1,6 +1,6 @@
 import 'server-only';
-import { completeWithFallback, formatError, parseJsonObject, type AnswerSchema, type ChainResult, type ImageInput } from './providers';
-import type { EtBlock } from '../everytime/items';
+import { completeWithFallback, configuredProviders, formatError, parseJsonObject, type AnswerSchema, type ChainResult, type ImageInput, type Provider } from './providers';
+import { normTime, type EtBlock } from '../everytime/items';
 
 // 에브리타임 시간표 캡처를 AI 비전으로 읽는다 (docs/EVERYTIME.md).
 //
@@ -67,14 +67,32 @@ export function parseTimetableAnswer(raw: string): TimetableAnswer {
   return {
     semester: str(o.semester).trim().slice(0, 40),
     blocks: (o.blocks as Record<string, unknown>[]).slice(0, 80).map(b => ({
-      name: str(b?.name).slice(0, 80), place: str(b?.place).slice(0, 80), day: str(b?.day), start: str(b?.start).trim(), end: str(b?.end).trim(),
+      name: str(b?.name).slice(0, 80), place: str(b?.place).slice(0, 80), day: str(b?.day).trim(), start: normTime(str(b?.start)), end: normTime(str(b?.end)),
     })),
     online: (o.online as unknown[]).slice(0, 30).map(v => str(v).slice(0, 80)),
   };
 }
 
-export function readTimetableImage(image: ImageInput): Promise<ChainResult<TimetableAnswer>> {
-  return completeWithFallback<TimetableAnswer>(SYSTEM, '이 에브리타임 시간표 캡처를 읽어 주세요.', {
-    images: [image], schema: TIMETABLE_SCHEMA, parse: parseTimetableAnswer,
-  });
+const read = (image: ImageInput, providers: Provider[]) => completeWithFallback<TimetableAnswer>(SYSTEM, '이 에브리타임 시간표 캡처를 읽어 주세요.', {
+  images: [image], schema: TIMETABLE_SCHEMA, parse: parseTimetableAnswer, providers,
+});
+
+export interface TimetableReading {
+  first: ChainResult<TimetableAnswer>;
+  /** 다른 AI의 두 번째 읽기. AI가 하나뿐이거나 두 읽기가 같은 제공자에서 나왔으면 null (대조할 수 없다) */
+  second: ChainResult<TimetableAnswer> | null;
+}
+
+/**
+ * 같은 캡처를 서로 다른 AI 둘에게 동시에 읽힌다 (CloneUp expiry_ocr: WinOCR·Tesseract 두 엔진을 돌려 일치를 믿는 방식).
+ * 첫째는 설정 순서 전체로, 둘째는 둘째 제공자부터 시작한다. 두 읽기의 대조는 crossCheck(lib/everytime/items.ts)가 한다.
+ */
+export async function readTimetableImage(image: ImageInput, providers: Provider[] = configuredProviders()): Promise<TimetableReading> {
+  if (providers.length < 2) return { first: await read(image, providers), second: null };
+  const [first, second] = await Promise.all([read(image, providers), read(image, providers.slice(1))]);
+  // 첫째가 폴백으로 둘째 제공자에 가서 답했다면 두 읽기는 같은 AI다 — 대조로 치지 않는다
+  if (!second.output || !first.output || second.provider === first.provider) {
+    return first.output ? { first, second: null } : { first: second, second: null };
+  }
+  return { first, second };
 }

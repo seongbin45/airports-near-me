@@ -95,3 +95,30 @@ describe('completeWithFallback — 이미지 전달', () => {
     if (id === 'gemini') expect(body).toContain('"inline_data"');
   });
 });
+
+describe('readTimetableImage — 두 AI 대조 읽기', () => {
+  const img = { mediaType: 'image/jpeg' as const, base64: 'AAAA' };
+  const P2: Provider[] = [{ id: 'openai', apiKey: 'k', model: 'gpt-test' }, { id: 'xai', apiKey: 'k', model: 'grok-test' }];
+  const ok = (blocks: unknown[]) => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ semester: '', blocks, online: [] }) } }] }), { status: 200 });
+
+  it('AI가 둘이면 서로 다른 AI가 동시에 읽는다', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input =>
+      ok([{ name: 'A', place: '', day: '월', start: String(input).includes('x.ai') ? '9:05' : '9:00', end: '10:00' }]));
+    const { readTimetableImage } = await import('../ai/timetable');
+    const r = await readTimetableImage(img, P2);
+    expect([r.first.provider, r.second?.provider]).toEqual(['openai', 'xai']);
+    expect(r.first.output?.blocks[0].start).toBe('09:00'); // "9:00" → "09:00"
+    expect(r.second?.output?.blocks[0].start).toBe('09:05');
+    fetchSpy.mockRestore();
+  });
+
+  it('첫째가 실패해 둘째 제공자로 넘어가면 같은 AI라 대조하지 않는다', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input =>
+      (String(input).includes('openai') ? new Response('', { status: 400 }) : ok([])));
+    const { readTimetableImage } = await import('../ai/timetable');
+    const r = await readTimetableImage(img, P2);
+    expect(r.first.provider).toBe('xai');
+    expect(r.second).toBeNull();
+    fetchSpy.mockRestore();
+  });
+});

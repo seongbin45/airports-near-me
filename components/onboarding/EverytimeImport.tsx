@@ -281,6 +281,13 @@ export default function EverytimeImport({ supabase, classes, setClasses }: Props
                         </label>
                       </div>
                     )}
+                    {r.item.agreement && r.item.agreement !== 'single' && (
+                      <div className={`text-[11px] ${r.item.agreement === 'both' ? 'text-[#2d6a3a]' : 'text-warn'}`}>
+                        {r.item.agreement === 'both' ? '두 AI가 같게 읽었어요.'
+                          : r.item.agreement === 'differ' ? `두 AI가 다르게 읽었어요(${r.item.alt}). 더 넓은 시간으로 잡았어요 — 캡처와 꼭 대조해 주세요.`
+                          : '한 AI만 읽은 과목이에요. 캡처에 실제로 있는지 확인해 주세요.'}
+                      </div>
+                    )}
                     {note && <div className={`text-[11px] ${chk?.tone === 'warn' || chk?.tone === 'error' ? 'text-warn' : 'text-faint'}`}>{note}</div>}
                   </div>
                 </div>

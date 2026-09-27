@@ -69,7 +69,7 @@ export interface AiCallRow {
   model: string | null;
   /** 실제로 답한 모델. 서버 측 폴백·모델 라우팅이 일어나면 model과 다르다 */
   served_model: string | null;
-  verify_detail: (Partial<VerifyDetail> & { refused?: boolean; parseError?: boolean; unavailable?: boolean; timetable?: { items: number; skipped: number } }) | null;
+  verify_detail: (Partial<VerifyDetail> & { refused?: boolean; parseError?: boolean; unavailable?: boolean; timetable?: { items: number; skipped: number; engines?: string[]; both?: number; differ?: number; one?: number } }) | null;
   trips: { dest_city: string; trip_date: string } | null;
 }
 

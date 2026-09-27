@@ -408,7 +408,9 @@ export default function MyData(p: Props) {
                   // 시간표 캡처 인식은 문장 검증이 아니라 사실값 읽기다 — 편명·시각 대조 문구를 쓰지 않는다
                   const image = c.kind === 'timetable_image';
                   const detail = image
-                    ? d?.timetable ? `과목 ${d.timetable.items}개 읽음${d.timetable.skipped ? ` · ${d.timetable.skipped}개 제외` : ''} · 사용자가 확인한 과목만 저장`
+                    ? d?.timetable ? `과목 ${d.timetable.items}개 읽음${d.timetable.skipped ? ` · ${d.timetable.skipped}개 제외` : ''}${
+                        (d.timetable.engines?.length ?? 0) > 1 ? ` · 두 AI 대조: 일치 ${d.timetable.both ?? 0} · 불일치 ${d.timetable.differ ?? 0} · 한쪽만 ${d.timetable.one ?? 0}` : ''
+                      } · 사용자가 확인한 과목만 저장`
                       : d?.refused ? 'AI가 읽지 않음' : d?.parseError ? '형식이 맞지 않는 답' : 'AI 제공자 모두 응답 없음'
                     : c.verified
                     ? `편명 ${d?.flights?.checked.length ?? 0}개 · 시각 ${d?.times?.checked.length ?? 0}개 DB와 일치`

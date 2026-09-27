@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeBlocks, safeSnap } from '../everytime/items';
+import { agreementCounts, crossCheck, normalizeBlocks, normTime, safeSnap, type EtItem } from '../everytime/items';
 
 // 에브리타임 가져오기의 공통 정리 규칙. 수업이 빠지거나 일찍 끝나게 잡히면 못 타는 편을 추천하므로
 // 시각은 안전한 쪽으로만 움직이고, 읽지 못한 블록은 사유와 함께 남긴다.
@@ -57,5 +57,43 @@ describe('normalizeBlocks', () => {
   it('요일 → 시작 시각 순으로 정렬한다', () => {
     const { items } = normalizeBlocks([b('B', '화', '09:00', '10:00'), b('A', '월', '13:00', '14:00'), b('C', '월', '09:00', '10:00')], [], { needsTimeCheck: false });
     expect(items.map(i => i.name)).toEqual(['C', 'A', 'B']);
+  });
+});
+
+// CloneUp(app/util/expiry_ocr.py)에서 가져온 두 가지: 여러 표기를 받아 주는 정규화, 두 엔진 대조.
+
+describe('normTime — AI가 쓴 여러 시각 표기', () => {
+  it.each([['9:00', '09:00'], ['09:00', '09:00'], ['9.30', '09:30'], ['9시', '09:00'], ['9시 30분', '09:30'], ['0930', '09:30'], [' 13:05 ', '13:05']])('%s → %s', (a, b) => {
+    expect(normTime(a)).toBe(b);
+  });
+  it('알아볼 수 없거나 범위 밖이면 그대로 둔다 (normalizeBlocks가 사유와 함께 뺀다)', () => {
+    expect(normTime('오전')).toBe('오전');
+    expect(normTime('25:00')).toBe('25:00');
+  });
+});
+
+describe('crossCheck — 두 AI의 읽기 대조', () => {
+  const it_ = (name: string, days: EtItem['days'], start: string, end: string, online = false): EtItem =>
+    ({ name, place: '', days, start, end, online, needsTimeCheck: true });
+
+  it('같으면 both, 시각이 다르면 넓은 쪽(시작 이른·종료 늦은)으로 differ, 한쪽만 있으면 one', () => {
+    const a = [it_('운영체제', ['월', '수'], '09:00', '10:15'), it_('데이터베이스', ['화'], '13:00', '14:15'), it_('헛것', ['금'], '10:00', '11:00')];
+    const b = [it_('운영 체제', ['월', '수'], '09:00', '10:15'), it_('데이터베이스', ['화'], '13:05', '14:30'), it_('영어', ['목'], '15:00', '16:00')];
+    const r = crossCheck(a, b);
+    expect(r.map(i => [i.name, i.agreement, i.start, i.end])).toEqual([
+      ['운영체제', 'both', '09:00', '10:15'],
+      ['데이터베이스', 'differ', '13:00', '14:30'],
+      ['영어', 'one', '15:00', '16:00'],
+      ['헛것', 'one', '10:00', '11:00'],
+    ]);
+    expect(r[1].alt).toBe('13:00–14:15 / 13:05–14:30');
+    expect(agreementCounts(r)).toEqual({ both: 1, differ: 1, one: 2 });
+  });
+
+  it('두 번째 읽기가 없으면 single, 온라인 강의는 한 번만', () => {
+    const r = crossCheck([it_('A', ['월'], '09:00', '10:00'), it_('온라인', [], '', '', true)], null);
+    expect(r.map(i => [i.name, i.agreement])).toEqual([['A', 'single'], ['온라인', undefined]]);
+    const r2 = crossCheck([it_('온라인', [], '', '', true)], [it_('온라인', [], '', '', true), it_('A', ['월'], '09:00', '10:00')]);
+    expect(r2.filter(i => i.online)).toHaveLength(1);
   });
 });
