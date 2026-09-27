@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;background:#f6f1ea;color:#2b2622;font-family:Pretendard,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2f62c4}a:hover{color:#1f4a9c}
+</style>
+</helmet>
+<div style="min-height:100dvh;display:flex;flex-direction:column;background:#f6f1ea">
+  <header style="flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;border-bottom:1px solid #e8dfd4;background:#fbf8f4">
+    <a href="내 여정.dc.html" style="flex:none;min-height:44px;padding:0 12px;border-radius:22px;display:flex;align-items:center;color:#2b2622;text-decoration:none;font-size:14px;font-weight:600">← 내 여정</a>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="font-weight:700;font-size:16px">오늘 출발 · 김포 → 제주</div>
+      <div style="font-size:12px;color:#7a7067">10월 9일(금) · KE1237 18:10</div>
+    </div>
+  </header>
+
+  <div style="flex:none;display:flex;gap:8px;align-items:center;overflow-x:auto;padding:10px 16px;background:#efe7dc;scrollbar-width:none">
+    <div style="flex:none;font-size:12px;font-weight:600;color:#5d544c">미리보기 · 지금 시각</div>
+    <sc-for list="{{ clocks }}" as="c" hint-placeholder-count="4">
+      <button onClick="{{ c.onClick }}" style="flex:none;min-height:36px;padding:0 12px;border-radius:18px;border:{{ c.border }};background:{{ c.bg }};color:{{ c.color }};font:inherit;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;white-space:nowrap">{{ c.label }}</button>
+    </sc-for>
+  </div>
+
+  <main style="flex:1;padding:20px 16px 32px;display:flex;justify-content:center">
+    <div style="width:100%;max-width:600px;display:flex;flex-direction:column;gap:16px">
+
+      <div style="border-radius:22px;padding:20px;background:{{ heroBg }};color:{{ heroInk }};display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:13px;font-weight:600;opacity:.9">{{ heroKicker }}</div>
+        <div style="font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1">{{ heroBig }}</div>
+        <div style="font-size:15px;line-height:1.5;font-weight:600;text-wrap:pretty">{{ heroText }}</div>
+        <sc-if value="{{ showCountdown }}" hint-placeholder-val="{{ true }}">
+          <div style="height:8px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden">
+            <div style="height:8px;border-radius:4px;background:#fff;width:{{ countPct }}"></div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="font-size:14px;font-weight:700">집 → 김포공항 국내선</div>
+          <div style="font-size:11px;color:#7a7067">{{ trafficAt }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+          <div style="background:#f7f2eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:11px;color:#7a7067">여정 저장 때 기준</div>
+            <div style="font-size:18px;font-weight:700;font-variant-numeric:tabular-nums">1시간 20분</div>
+            <div style="font-size:11px;color:#7a7067">평일 오후 평균</div>
+          </div>
+          <div style="background:{{ liveBg }};border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:11px;color:#7a7067">지금 실시간 교통</div>
+            <div style="font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:{{ liveInk }}">{{ liveDur }}</div>
+            <div style="font-size:11px;color:{{ liveInk }}">{{ liveDiff }}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#9a9087;line-height:1.5">카카오모빌리티 길찾기 · 출발 3시간 전부터 10분마다 다시 확인해요. 앱을 열 때도 바로 확인해요.</div>
+      </div>
+
+      <div style="background:#fffdfa;border:1px solid #ece3d8;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="font-size:14px;font-weight:700">KE1237 운항 상태</div>
+          <div style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;color:{{ flightInk }};background:{{ flightBg }}">{{ flightStatus }}</div>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:{{ r.divider }}">
+              <div style="font-size:13px;color:#7a7067">{{ r.k }}</div>
+              <div style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right">{{ r.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#9a9087;line-height:1.5">한국공항공사 실시간 운항 정보 · 게이트는 출발 약 1시간 전에 정해져요.</div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="편 상세.dc.html" style="flex:1;min-width:140px;min-height:48px;border-radius:24px;border:1px solid #e2d8cc;background:#fffdfa;color:#2b2622;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;text-decoration:none">단계별 시간표</a>
+        <a href="https://map.kakao.com" target="_blank" rel="noopener" style="flex:1;min-width:140px;min-height:48px;border-radius:24px;border:none;background:#2f62c4;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;text-decoration:none">길 안내 열기</a>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { now: 'early' };
+
+  renderVals() {
+    const s = this.state;
+    const SC = {
+      early: { clock: '13:30', live: 80, left: '2시간 40분', pct: '10%', kicker: '집에서 나갈 시각', big: '16:10', text: '지금 교통은 평소와 같아요. 나갈 시각 30분 전에 한 번 더 알려드릴게요.', bg: '#2f62c4', ink: '#fff', status: '정상', gate: '미정' },
+      jam: { clock: '15:20', live: 105, left: '25분', pct: '80%', kicker: '나갈 시각이 앞당겨졌어요', big: '15:45', text: '평소보다 25분 더 걸려요. 25분 안에 나가면 여유 40분을 지킬 수 있어요.', bg: '#b0472a', ink: '#fff', status: '정상', gate: '미정' },
+      delay: { clock: '15:30', live: 85, left: '1시간 05분', pct: '45%', kicker: '편이 지연됐어요 · 나갈 시각', big: '16:35', text: 'KE1237이 18:40으로 30분 늦춰졌어요. 교통도 5분 더 걸려서 16:35에 나가면 돼요.', bg: '#9a5a1e', ink: '#fff', status: '지연 30분', gate: '7번' },
+      late: { clock: '16:30', live: 90, left: '', pct: '100%', kicker: '지금 나가도 늦을 수 있어요', big: '18:00', text: '지금 나가면 18:00 도착으로 탑승 마감(17:50)보다 늦어요. 대한항공(1588-2001)에 뒤 편 변경을 문의해 보세요.', bg: '#2b2622', ink: '#fff', status: '정상', gate: '7번' }
+    }[s.now];
+    const base = 80, diff = SC.live - base;
+    const fmt = m => `${Math.floor(m / 60) ? Math.floor(m / 60) + '시간 ' : ''}${String(m % 60).padStart(2, '0')}분`;
+    const delayed = s.now === 'delay';
+    return {
+      clocks: [['early', '13:30 여유'], ['jam', '15:20 정체'], ['delay', '15:30 편 지연'], ['late', '16:30 늦음']].map(([id, label]) => { const on = s.now === id;
+        return { label, onClick: () => this.setState({ now: id }), border: on ? '1.5px solid #2f62c4' : '1px solid #d8cec2', bg: on ? '#e8eefa' : '#fffdfa', color: on ? '#1f4a9c' : '#2b2622' }; }),
+      heroBg: SC.bg, heroInk: SC.ink, heroKicker: SC.kicker, heroBig: SC.big, heroText: SC.text,
+      showCountdown: !!SC.left, countPct: SC.pct,
+      trafficAt: `${SC.clock} 확인`,
+      liveDur: fmt(SC.live), liveDiff: diff > 0 ? `평소보다 ${diff}분 더` : '평소와 같음',
+      liveBg: diff >= 20 ? '#f8e3dc' : diff > 0 ? '#fbeedd' : '#e0efe0', liveInk: diff >= 20 ? '#b0472a' : diff > 0 ? '#9a5a1e' : '#2d6a3a',
+      flightStatus: SC.status, flightInk: delayed ? '#9a5a1e' : '#2d6a3a', flightBg: delayed ? '#fbeedd' : '#e0efe0',
+      rows: [['예정 출발', delayed ? '18:10 → 18:40' : '18:10'], ['탑승 마감', delayed ? '18:20' : '17:50'], ['게이트', SC.gate], ['제주 도착', delayed ? '19:45' : '19:15']]
+        .map(([k, v], i) => ({ k, v, divider: i ? '1px solid #f1eae1' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
