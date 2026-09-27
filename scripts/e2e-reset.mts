@@ -34,7 +34,7 @@ const need = (k: string) => {
 
 // 값이 없으면 즉시 중단하고, 있으면 그 타입 그대로 돌려준다.
 // next build의 TS 검사에서 `possibly null/undefined`가 남지 않게 한 곳에서 좁힌다.
-const must = <T>(v: T | null | undefined, msg: string): T => {
+const must = <T,>(v: T | null | undefined, msg: string): T => {
   if (v == null) { console.error(`중단: ${msg}`); process.exit(2); }
   return v;
 };
