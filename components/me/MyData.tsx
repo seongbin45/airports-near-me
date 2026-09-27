@@ -80,6 +80,8 @@ export default function MyData(p: Props) {
   const armedAt = useRef<{ revoke: number | null; del: number | null }>({ revoke: null, del: null });
   const [err, setErr] = useState('');
   const [importMsg, setImportMsg] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [exported, setExported] = useState(false);
 
   const fail = (e: { message: string } | null) => { if (e) setErr(e.message); return !!e; };
 
@@ -127,6 +129,13 @@ export default function MyData(p: Props) {
       ? { action: 'dismiss', tripId: t.id }
       : { action: 'dismiss_candidate', candidateId: t.id })) return;
     setPending(ps => ps.filter(x => !(x.kind === t.kind && x.id === t.id)));
+  }
+
+  // 읽는 동안에는 버튼을 끄고, 끝나면 input을 비운다 — 비우지 않으면 같은 파일을 다시 골라도 onChange가 오지 않는다.
+  async function onTimelineFile(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    setImporting(true);
+    try { await importTimeline(file); } finally { input.value = ''; setImporting(false); }
   }
 
   // 구글 타임라인 파일은 브라우저에서만 읽는다. 추정한 여정만 서버로 보내 확인 대기 후보로 넣는다.
@@ -210,6 +219,8 @@ export default function MyData(p: Props) {
     const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
     Object.assign(document.createElement('a'), { href: url, download: 'my-data.json' }).click();
     URL.revokeObjectURL(url);
+    // Blob 내려받기는 실제로 저장됐는지 알 수 없다. 이 문구는 "파일을 만들어 내려받기를 시작했다"는 뜻이다.
+    setExported(true);
   }
   async function deleteAccount() {
     if (!confirmDel) { armedAt.current.del = Date.now(); return setConfirmDel(true); }
@@ -333,9 +344,11 @@ export default function MyData(p: Props) {
                   휴대폰에서 내보낸 Timeline.json을 올리면 공항에 다녀온 여정을 찾아 확인 대기에 넣어요.
                   파일은 브라우저 안에서만 읽고, 서버에는 찾아낸 여정만 보내요.
                 </div>
-                <input type="file" accept=".json,application/json"
-                  onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; importTimeline(f); }}
-                  className="text-xs file:mr-2 file:min-h-9 file:rounded-full file:border file:border-line-strong file:bg-surface file:px-3 file:text-[13px] file:font-semibold" />
+                <label className={`flex min-h-10 items-center self-start rounded-full border border-line-strong bg-surface px-3.5 text-[13px] font-semibold focus-within:ring-2 focus-within:ring-accent ${importing ? 'opacity-60' : 'cursor-pointer'}`}>
+                  {importing ? '읽는 중…' : '파일 선택'}
+                  <input type="file" accept=".json,application/json" className="sr-only" disabled={importing}
+                    onChange={e => onTimelineFile(e.currentTarget)} />
+                </label>
                 {importMsg && <div className="text-[12px] leading-normal text-ink-2 text-pretty">{importMsg}</div>}
               </div>}
               <div className="flex flex-wrap gap-1.5">
@@ -453,7 +466,7 @@ export default function MyData(p: Props) {
                 </div>
               )}
               <div className="flex flex-col gap-2">
-                <button onClick={exportJson} className="min-h-12 rounded-full border border-line-strong bg-surface text-sm font-semibold">내 데이터 내보내기 (JSON 파일)</button>
+                <button onClick={exportJson} className="min-h-12 rounded-full border border-line-strong bg-surface text-sm font-semibold">{exported ? 'my-data.json 파일을 내려받았어요' : '내 데이터 내려받기 (JSON)'}</button>
                 <button onClick={deleteAccount} className="min-h-12 rounded-full border border-[#e9c9bd] bg-surface px-4 text-sm font-semibold text-danger">
                   {confirmDel ? '한 번 더 누르면 계정과 모든 데이터가 삭제돼요' : '계정 삭제'}
                 </button>
