@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { existingClassNote, existingEvent, parseIcs, type IcsResult } from '../data/ics';
+import { insertedId, existingClassNote, existingEvent, parseIcs, type IcsResult } from '../data/ics';
 
 // 픽스처는 실제 내보내기 파일이 아니다 — RFC 5545와 구글 캘린더 내보내기의 알려진 형태(PRODID·VTIMEZONE·VALARM·
 // RECURRENCE-ID)를 본떠 만든 것이다. 실제 파일을 받으면 개인정보를 지우고 fixtures/에 더한다.
@@ -182,5 +182,22 @@ describe('이미 있는 것과 비교', () => {
     const events = [{ date: '2026-10-20', start: '15:00', description: '운영체제 중간고사' }];
     expect(existingEvent({ date: '2026-10-20', start: '15:00', description: '운영체제 중간고사' }, events)).toBe(true);
     expect(existingEvent({ date: '2026-10-20', start: '16:00', description: '운영체제 중간고사' }, events)).toBe(false);
+  });
+});
+
+// 저장은 성공했는데 insert().select('id') 응답이 null인 경우 — 여기서 크래시하면 저장된 행이 화면에 안 보인다.
+describe('insertedId', () => {
+  it('정상 응답이면 그 행의 id', () => {
+    expect(insertedId([{ id: 7 }, { id: 8 }], 1)).toBe(8);
+  });
+  it('data가 null·undefined면 -1 (크래시 대신)', () => {
+    expect(insertedId(null, 0)).toBe(-1);
+    expect(insertedId(undefined, 3)).toBe(-1);
+  });
+  it('응답이 요청보다 짧아도 -1', () => {
+    expect(insertedId([{ id: 7 }], 2)).toBe(-1);
+  });
+  it('id 0을 -1로 뭉개지 않는다', () => {
+    expect(insertedId([{ id: 0 }], 0)).toBe(0);
   });
 });

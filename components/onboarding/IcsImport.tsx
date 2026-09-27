@@ -3,7 +3,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkClass, checkEvent, DAYS, EVENT_KINDS, type ClassItem, type EventKind } from '@/lib/onboarding/validate';
-import { existingClassNote, existingEvent, ICS_MAX_BYTES, parseIcs, type IcsClass, type IcsEvent, type IcsSkip } from '@/lib/data/ics';
+import { insertedId, existingClassNote, existingEvent, ICS_MAX_BYTES, parseIcs, type IcsClass, type IcsEvent, type IcsSkip } from '@/lib/data/ics';
 import { fmtDate, kstToday } from '@/lib/time';
 import { inputCls } from '@/components/ui';
 import type { EventItem } from './ScheduleStep';
@@ -77,7 +77,7 @@ export default function IcsImport({ supabase, isStudent, classes, setClasses, ev
       }));
       const { data, error } = await supabase.from('class_timetable').insert(rows).select('id');
       if (error) { setBusy(false); setError(`수업을 저장하지 못했어요: ${error.message}`); return; }
-      setClasses(cs => [...cs, ...rows.map((row, i) => ({ id: data[i].id, name: row.name, place: row.place ?? '', days: row.days, start: row.start_time, end: row.end_time }))]);
+      setClasses(cs => [...cs, ...rows.map((row, i) => ({ id: insertedId(data, i), name: row.name, place: row.place ?? '', days: row.days, start: row.start_time, end: row.end_time }))]);
       addedClasses = rows.length;
     }
     if (pickedEvents.length) {
@@ -92,7 +92,7 @@ export default function IcsImport({ supabase, isStudent, classes, setClasses, ev
         setClassRows([]);
         return;
       }
-      setEvents(es => [...es, ...pickedEvents.map((r, i) => ({ ...toDraft(r), description: rows[i].description, id: data[i].id, source: 'ics' }))]);
+      setEvents(es => [...es, ...pickedEvents.map((r, i) => ({ ...toDraft(r), description: rows[i].description, id: insertedId(data, i), source: 'ics' }))]);
       addedEvents = rows.length;
     }
     setBusy(false);

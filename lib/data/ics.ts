@@ -374,3 +374,15 @@ export function existingClassNote(c: Pick<IcsClass, 'name' | 'days' | 'start'>, 
 export function existingEvent(e: Pick<IcsEvent, 'date' | 'start' | 'description'>, events: ExistingEvent[]): boolean {
   return events.some(x => x.date === e.date && (x.start ?? '').slice(0, 5) === e.start && x.description.trim() === e.description.trim());
 }
+
+/**
+ * `insert(...).select('id')` 응답에서 화면 상태에 쓸 id를 꺼낸다.
+ *
+ * 저장이 성공했는데 data가 null로 오는 경우가 있다(응답 본문이 비었거나 행 단위 권한으로 select가 걸린 경우).
+ * 그때 `data[i].id`는 크래시다 — 저장은 이미 끝났는데 화면만 죽는다.
+ * id는 나중에 그 행을 고치거나 지울 때만 쓰므로, 못 받으면 -1(실재하지 않는 값)을 넣어
+ * "목록에는 보이지만 DB 조작은 안 되는 행"으로 남긴다. 없는 id를 지우려 해도 매칭되는 행이 없어 무해하다.
+ */
+export function insertedId(rows: { id: number }[] | null | undefined, i: number): number {
+  return rows?.[i]?.id ?? -1;
+}

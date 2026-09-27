@@ -8,9 +8,14 @@ E2E는 계정을 지우고 다시 만들고, 수업·일정을 넣는다. 운영
 그래서 검사는 `e2e_marker` 표식이 있는 프로젝트에서만 돈다. 표식이 없으면(조회 오류 포함) 첫 단계에서 멈춘다 —
 URL·키·ref가 전부 틀려도 운영 DB에는 표식이 없으므로 운영 데이터를 건드리지 않는다.
 
+표식 테이블은 마이그레이션에 없다 — 운영 프로젝트에 생기면 보호가 무력해지기 때문이다.
+**테스트 프로젝트에서만** `supabase/e2e-marker.sql` 을 SQL Editor로 1회 실행한다.
+
 ```sql
-create table public.e2e_marker (id int primary key, note text);
-insert into public.e2e_marker values (1, 'e2e-test-project');
+-- supabase/e2e-marker.sql 과 같은 내용
+create table if not exists public.e2e_marker (id int primary key, note text not null);
+insert into public.e2e_marker (id, note) values (1, 'e2e-test-project')
+  on conflict (id) do update set note = excluded.note;
 alter table public.e2e_marker enable row level security;  -- 정책 없음 = 서비스 롤만 읽는다
 ```
 
@@ -54,6 +59,19 @@ e2e         로그인 → 가입 6단계 → 대화 → 추천 → /me
 - **`.e2e-date`**는 기계마다 다르므로 커밋하지 않는다(`.gitignore`).
 - 로컬 실행: `npm run dev` 대신 `npm run build && npm run start`를 쓴다(빌드 시점 인라인 때문).
 
+## 검사에 필요한 데이터
+
+| 무엇 | 어떻게 | 없으면 |
+|---|---|---|
+| 운항 스케줄 | `e2e-data.yml`의 `sync -- kac-full`·`tago-horizon` | 추천 카드가 0건 |
+| 거주지 → 공항 접근 시간 | `e2e-data.yml`의 `e2e:seed` (고정값 `source = E2E 고정값`) | `regionMissing` → "걸리는 시간이 아직 DB에 없어 계산할 수 없어요" |
+| 계정·방문 기록 | `e2e-reset.mts` | '지난 제주 방문 3회' 단언 실패 |
+| 지역 좌표 | 필요 없음 (고정값을 직접 넣으므로 좌표를 안 쓴다) | `doctor`의 `regions-coords`가 주의로 뜰 뿐이다 |
+
+접근 시간을 카카오 배치로 채우지 않는 이유: 키를 CI에 두면 쿼터가 운영 동기화·앱 런타임과 섞이고,
+검사는 "추천이 뜨는가"를 보는 것이지 "카카오 값이 맞는가"를 보는 것이 아니다.
+값은 `source = E2E 고정값`으로 **투명하게 표시**한다(`is_sample`은 켜지 않는다 — 화면에 샘플 배지가 붙으면 E2E의 "샘플 아님" 단언과 어긋난다).
+
 ## 시크릿이 없을 때 (테스트 프로젝트를 만들기 전)
 
 `E2E_SUPABASE_URL`·`E2E_SUPABASE_SERVICE_ROLE_KEY`·`DEV_TEST_PASSWORD` 중 하나라도 비어 있으면
@@ -80,11 +98,26 @@ PR마다 빨간 X가 쌓이지 않게 하려는 것이다. 건너뛸 때는 `::w
 
 | 증상 | 원인 |
 |---|---|
-| `중단: e2e_marker…` | 테스트 프로젝트가 아니거나 표식이 지워졌다. 운영 DB에서는 정상 동작이다 |
+| `중단: E2E_SUPABASE_URL이 **운영 프로젝트**…를 가리키고 있어요` | 시크릿이 운영 URL을 가리킨다. **표식을 만들지 말고** 시크릿을 테스트 프로젝트 URL로 바꾼다 |
+| `중단: …에 e2e_marker 표식 테이블이 없어요` | 표식 만들기를 아직 안 했다(또는 URL이 다른 프로젝트다). 테스트 프로젝트 SQL Editor에서 `supabase/e2e-marker.sql` 실행 |
+| `중단: e2e_marker의 note가 …가 아니에요` | 표식 행의 값이 다르다. 운영 DB에서는 정상 동작이다(보호가 작동한 것) |
+| `중단: 스키마가 아직 없어요: …` | 테스트 프로젝트에 마이그레이션이 적용되지 않았다. `supabase db push` 또는 SQL Editor |
+
+### 운영 DB를 지키는 두 겹
+
+1. **URL 대조** — `PROD_SUPABASE_URL`(운영)과 같으면 표식을 보기도 전에 멈춘다. 운영 URL을 몰라도,
+2. **표식** — `e2e_marker`의 값이 `e2e-test-project`가 아니면(없음 포함) 멈춘다. API 키만 틀린 경우는 여기서 걸린다.
+
+1번이 있는 이유: 표식이 없을 때 "만들라"는 안내를 그대로 따르면, 그 프로젝트가 운영이었던 경우
+운영 DB에 표식을 심어 보호를 스스로 무력화하게 된다. 그래서 순서가 URL 대조 → 표식이다.
 | `환경변수 …가 없어요` (exit 2) | Secrets 누락 |
 | `표식 확인됨` 뒤 `실제 운항 스케줄이 없어요` | `e2e-data.yml`을 한 번 돌려 데이터를 채운다 |
 | 서버가 안 뜸 | `server.log` 아티팩트를 본다. 대개 env 누락(`NEXT_PUBLIC_*`를 빌드 전에 못 넣은 경우) |
 | 로그인 실패 | `DEV_TEST_PASSWORD`와 계정 상태. `e2e:reset`이 계정을 새로 만들므로 비밀번호는 Secret 값 그대로여야 한다 |
+
+## 프로젝트 준비
+
+프로젝트 생성·마이그레이션·표식·Secrets·운영 정리 절차는 **`docs/E2E_SETUP.md`** 에 있다.
 
 ## 관련 결정
 
