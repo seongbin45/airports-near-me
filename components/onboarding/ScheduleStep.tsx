@@ -7,11 +7,12 @@ import { layoutLanes } from '@/lib/onboarding/lanes';
 import { dateShortcuts, fmtDate, toMin } from '@/lib/time';
 import { GOOGLE_CALENDAR_READY, ICS_IMPORT_READY } from '@/lib/data/calendar-import';
 import IcsImport from './IcsImport';
+import EverytimeImport from './EverytimeImport';
 import { inputCls, pill } from '@/components/ui';
 
 export interface EventItem extends EventDraft { id: number; source: string }
 
-const SOURCE_LABEL: Record<string, string> = { manual: '직접 입력', google_calendar: '구글 캘린더', ics: '.ics 파일' };
+const SOURCE_LABEL: Record<string, string> = { manual: '직접 입력', google_calendar: '구글 캘린더', ics: '.ics 파일', everytime: '에브리타임' };
 const TINTS = [['#dfe8f8', '#1f4a9c'], ['#f6e1cf', '#8a4617'], ['#e0efe0', '#2d6a3a'], ['#eee0f2', '#6b3a80'], ['#f4ebc9', '#735c12'], ['#f5dddd', '#8f3434']];
 const HOUR0 = 9, HOURS = 10, PX = 44;
 const PRESETS = [['09:00', '10:15'], ['10:30', '11:45'], ['12:00', '13:15'], ['13:30', '14:45'], ['15:00', '16:15'], ['16:30', '17:45']];
@@ -113,6 +114,7 @@ function Classes({ supabase, classes, setClasses }: Pick<Props, 'supabase' | 'cl
 
   return (
     <div className="flex flex-col gap-3.5">
+      <EverytimeImport supabase={supabase} classes={classes} setClasses={setClasses} />
       <div className="overflow-x-auto rounded-2xl border border-line bg-surface p-3">
         <div className="grid min-w-[320px] gap-x-1 gap-y-1.5" style={{ gridTemplateColumns: `40px repeat(${gridDays.length},minmax(52px,1fr))` }}>
           <div />

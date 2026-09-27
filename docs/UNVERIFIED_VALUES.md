@@ -16,6 +16,11 @@
 | TAGO `economyCharge = 0` 의 의미 | `parseTagoItem` | "요금 정보 없음"으로 처리 | TAGO 운영팀(054-459-7870) 문의 |
 | TAGO에서 같은 날 같은 편명이 시각만 5분쯤 다르게 두 번 오는 경우 (예: OZ8963 15:05/15:10) | `dedupe` | 더 이른 출발을 남김 | 항공사 시간표와 대조 |
 | 행정구역 목록 | `regions` | 2026-09 개편 반영, 공식 코드(`adm_code`) 없음 | 행정안전부 행정표준코드로 교체 |
+| 에브리타임 XML `day` 번호 = 0 월 … 6 일 | `lib/everytime/xml.ts` `DAY_BY_INDEX` | every2cal 한 곳(파이썬 `weekday()`에 그대로 넘김)에서만 추론 | 본인 공유 링크에서 북마클릿 실행 → 미리보기 요일을 앱 화면과 대조 (docs/EVERYTIME.md) |
+| 에브리타임 XML 시각 = 5분 단위 정수(`starttime×5`분) | `lib/everytime/xml.ts` `slot` | every2cal·linker 두 구현 일치 | 위와 같은 실측 |
+| 공유 시간표 XML 요청이 사용자 브라우저(에브리타임 페이지)에서 CORS로 허용되는지, 쿠키가 필요한지 | `lib/everytime/bookmarklet.ts` | 모름 — 기본(same-origin) 실패 시 `include`로 한 번 더 | 북마클릿 실측 |
+| 학기 표시(`<table year semester>`) | `lib/everytime/xml.ts` | 속성 이름 추정 — 없으면 "에브리타임 시간표"로 표시 | 북마클릿 실측 |
+| 시간표 캡처 인식 정확도 | `lib/ai/timetable.ts` | 비전 모델의 위치→수치 오차 평균 6% 안팎(ExChart, CHI'26) — 모든 항목에 "시각 확인" 필수 | 실제 캡처(월–금, 월–토)로 제공자별 대조 |
 
 ## 확인됨
 

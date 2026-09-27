@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+  <table year="2026" semester="2" status="1" identifier="AbCdEf123456" id="99">
+    <subject id="1">
+      <internal value="CSE301"/>
+      <name value="운영체제"/>
+      <professor value="김교수"/>
+      <time value="월수 09:00-10:15">
+        <data day="0" starttime="108" endtime="123" place="공학관 301"/>
+        <data day="2" starttime="108" endtime="123" place="공학관 301"/>
+      </time>
+      <place value=""/>
+      <credit value="3"/>
+    </subject>
+    <subject id="2">
+      <name value="데이터베이스"/>
+      <professor value="이교수"/>
+      <time value="">
+        <data day="1" starttime="157" endtime="172" place="공학관 204"/>
+        <data day="3" starttime="157" endtime="172" place="공학관 204"/>
+      </time>
+    </subject>
+    <subject id="3">
+      <name value="대학영어 &amp; 글쓰기"/>
+      <professor value=""/>
+      <time value="">
+        <data day="5" starttime="120" endtime="140" place="인문관 112"/>
+      </time>
+    </subject>
+    <subject id="4">
+      <name value="온라인 교양: 미술의 이해"/>
+      <professor value=""/>
+      <time value=""/>
+    </subject>
+    <subject id="5">
+      <name value="일요 특강"/>
+      <time value="">
+        <data day="6" starttime="120" endtime="144" place=""/>
+      </time>
+    </subject>
+  </table>
+</response>

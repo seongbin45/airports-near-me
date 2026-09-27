@@ -70,6 +70,75 @@ async function chatFlow(page, tag) {
   check(`[${tag}] 가로 스크롤 없음`, await noHScroll(page));
 }
 
+// ── 에브리타임 불러오기 (가입 4단계 · 수업 시간표 탭)
+// 에브리타임에는 접속하지 않는다: everytime.kr과 api.everytime.kr 요청은 모두 가로채 픽스처로 돌려준다.
+// 월–목 수업만 넣는다 — 금요일에 수업을 더하면 아래 "마지막 일정 14:30" 단언이 깨진다.
+// 캡스톤디자인(금 10:30–11:45)은 앞에서 직접 넣은 과목이라 "이미 시간표에 있어요"로 체크가 풀려야 한다.
+const ET_ID = 'E2eFixture01';
+const ET_XML = `<?xml version="1.0" encoding="UTF-8"?><response><table year="2026" semester="2">
+<subject><name value="운영체제"/><time><data day="0" starttime="108" endtime="123" place="공학관 301"/><data day="2" starttime="108" endtime="123" place="공학관 301"/></time></subject>
+<subject><name value="데이터베이스"/><time><data day="1" starttime="157" endtime="172" place="공학관 204"/><data day="3" starttime="157" endtime="172" place="공학관 204"/></time></subject>
+<subject><name value="캡스톤디자인"/><time><data day="4" starttime="126" endtime="141" place=""/></time></subject>
+<subject><name value="온라인 교양"/><time/></subject>
+</table></response>`;
+// 1×1 PNG — 캡처 경로는 라우트를 목으로 대체하므로 이미지 내용은 쓰지 않는다
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+
+async function everytimeImport(page, ctx) {
+  let apiBody = null;
+  await ctx.route('https://everytime.kr/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html><body>shared timetable</body></html>' }));
+  await ctx.route('https://api.everytime.kr/**', r => {
+    apiBody = r.request().postData();
+    return r.fulfill({ status: 200, contentType: 'text/xml', headers: { 'access-control-allow-origin': 'https://everytime.kr' }, body: ET_XML });
+  });
+
+  await page.getByRole('button', { name: '불러오기', exact: true }).click();
+  // production 빌드가 만든 북마크 주소를 그대로 꺼내, 공유 페이지(가로챈 것)에서 실행한다
+  const href = await page.getByTestId('everytime-bookmarklet').getAttribute('href');
+  check('[everytime] 북마크 주소가 javascript: 로 들어감', !!href?.startsWith('javascript:'));
+  const et = await ctx.newPage();
+  await et.goto(`https://everytime.kr/@${ET_ID}`);
+  await et.evaluate(code => { (0, eval)(code); }, decodeURIComponent(href.slice('javascript:'.length)));
+  const out = et.locator('#airports-near-me-everytime textarea');
+  await out.waitFor({ timeout: 10000 });
+  const copied = await out.inputValue();
+  check('[everytime] 북마클릿이 페이지와 같은 요청을 한 번 보냄(헤더 위조 없음)', apiBody === `identifier=${ET_ID}&friendInfo=true`, apiBody ?? '요청 없음');
+  check('[everytime] 받은 XML을 머리말과 함께 복사', copied.startsWith('ETX1\n<?xml'));
+  await et.close();
+
+  await page.fill('textarea[aria-label="에브리타임에서 복사한 내용"]', copied);
+  await page.getByRole('button', { name: '불러오기', exact: true }).click();
+  await page.getByText('2026년 2학기 · 2과목 선택').waitFor();
+  check('[everytime] 이미 있는 과목은 체크 해제', await page.getByText('이미 시간표에 있어요').isVisible());
+  check('[everytime] 온라인 강의는 고를 수 없음', await page.getByRole('checkbox', { name: '온라인 교양 추가' }).isDisabled());
+  await page.screenshot({ path: `${OUT}/m3a-everytime-preview.png`, fullPage: true });
+  await page.getByRole('button', { name: '2과목 시간표에 추가' }).click();
+  await page.getByText('에브리타임에서 2과목을 시간표에 넣었어요.', { exact: false }).waitFor();
+  check('[everytime] 공유 링크로 2과목 추가', true);
+
+  // 캡처 경로: AI 키가 없는 CI에서는 라우트를 목으로 대체해 화면 흐름만 본다
+  await page.route('**/api/import/everytime-image', r => r.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ semester: null, skipped: [], items: [{ name: '캡처과목', place: '', days: ['화'], start: '16:00', end: '17:15', online: false, needsTimeCheck: true }] }),
+  }));
+  await page.getByRole('button', { name: '다시 불러오기' }).click();
+  await page.getByRole('tab', { name: '캡처로' }).click();
+  await page.locator('input[type=file][accept^="image/"]').setInputFiles({ name: 'timetable.png', mimeType: 'image/png', buffer: PNG_1PX });
+  const pick = page.getByRole('checkbox', { name: '캡처과목 추가' });
+  await pick.waitFor();
+  check('[everytime] 캡처: 시각 확인 전에는 고를 수 없음', await pick.isDisabled());
+  await page.getByLabel('캡처과목 시작 시각').fill('16:05');
+  await page.getByRole('checkbox', { name: '시각 확인' }).check();
+  check('[everytime] 캡처: 시각 확인 뒤 고를 수 있음', await pick.isEnabled() && await pick.isChecked());
+  await page.screenshot({ path: `${OUT}/m3b-everytime-capture.png`, fullPage: true });
+  await page.getByRole('button', { name: '1과목 시간표에 추가' }).click();
+  await page.getByText('에브리타임에서 1과목을 시간표에 넣었어요.', { exact: false }).waitFor();
+  check('[everytime] 캡처로 1과목 추가(고친 시각으로)', await page.getByText(/캡처과목/).first().isVisible());
+  await page.unroute('**/api/import/everytime-image');
+  await ctx.unroute('https://everytime.kr/**');
+  await ctx.unroute('https://api.everytime.kr/**');
+}
+
 // ── 모바일: 가입 6단계 + 대화
 {
   const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, locale: 'ko-KR' });
@@ -98,6 +167,8 @@ async function chatFlow(page, tag) {
   await page.getByText('캡스톤디자인 수업을 저장했어요.').waitFor();
   check('수업 저장', true);
   await page.screenshot({ path: `${OUT}/m3-classes.png`, fullPage: true });
+
+  await everytimeImport(page, ctx);
 
   await page.getByRole('button', { name: /다가오는 일정/ }).click();
   await page.getByRole('button', { name: '회의' }).click();

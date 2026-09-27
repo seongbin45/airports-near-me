@@ -39,7 +39,7 @@ interface Props {
 
 const TABS = [['basic', '기본 정보'], ['trips', '방문 기록'], ['ai', 'AI 기록'], ['privacy', '개인정보']] as const;
 type Tab = (typeof TABS)[number][0];
-const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일' };
+const SOURCE: Record<string, string> = { manual: '직접 입력', trip: '대화에서 확인', google_timeline: 'Timeline.json', google_calendar: '구글 캘린더', ics: '.ics 파일', everytime: '에브리타임' };
 /** 타임라인 내보내기 파일 상한. 이보다 큰 파일을 JSON.parse하면 브라우저가 멈춘다 */
 const MAX_TIMELINE_BYTES = 50 * 1024 * 1024;
 /** 어느 모델이 답했는지 한 줄로. 서버 측 폴백이 일어나면 요청 모델과 다르므로 그때는 화살표로 보여준다. */
@@ -405,7 +405,14 @@ export default function MyData(p: Props) {
                     ...(d?.flights?.mismatched ?? []), ...(d?.times?.mismatched ?? []), ...(d?.places?.mismatched ?? []),
                     ...(d?.durations?.mismatched ?? []), ...(d?.dates?.mismatched ?? []), ...(d?.forbidden ?? []),
                   ];
-                  const detail = c.verified
+                  // 시간표 캡처 인식은 문장 검증이 아니라 사실값 읽기다 — 편명·시각 대조 문구를 쓰지 않는다
+                  const image = c.kind === 'timetable_image';
+                  const detail = image
+                    ? d?.timetable ? `과목 ${d.timetable.items}개 읽음${d.timetable.skipped ? ` · ${d.timetable.skipped}개 제외` : ''}${
+                        (d.timetable.engines?.length ?? 0) > 1 ? ` · 두 AI 대조: 일치 ${d.timetable.both ?? 0} · 불일치 ${d.timetable.differ ?? 0} · 한쪽만 ${d.timetable.one ?? 0}` : ''
+                      } · 사용자가 확인한 과목만 저장`
+                      : d?.refused ? 'AI가 읽지 않음' : d?.parseError ? '형식이 맞지 않는 답' : 'AI 제공자 모두 응답 없음'
+                    : c.verified
                     ? `편명 ${d?.flights?.checked.length ?? 0}개 · 시각 ${d?.times?.checked.length ?? 0}개 DB와 일치`
                     : d?.refused ? 'AI가 답하지 않음 · 표로 대체'
                     : d?.parseError ? '형식이 맞지 않는 답 · 표로 대체'
@@ -417,7 +424,7 @@ export default function MyData(p: Props) {
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 text-sm font-semibold">{ask}</div>
                         <span className={`flex-none rounded-lg px-2 py-0.5 text-[11px] font-semibold ${c.verified ? 'bg-[#e0efe0] text-[#2d6a3a]' : 'bg-warn-soft text-warn'}`}>
-                          {c.verified ? '검증 통과' : '표시 안 함'}
+                          {image ? (c.verified ? '인식 완료' : '읽지 못함') : c.verified ? '검증 통과' : '표시 안 함'}
                         </span>
                       </div>
                       <div className="text-xs text-muted tabular-nums">

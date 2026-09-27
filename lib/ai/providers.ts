@@ -61,6 +61,23 @@ export function configuredProviders(env: Env = process.env): Provider[] {
   return out;
 }
 
+/** 호출마다 다른 답 형식을 쓸 때 (예: 시간표 캡처 인식). 기본은 문장 답(OUTPUT_SCHEMA) */
+export interface AnswerSchema { json: object; gemini: object }
+export const TEXT_SCHEMA: AnswerSchema = { json: OUTPUT_SCHEMA, gemini: GEMINI_SCHEMA };
+
+/** 이미지 입력 (base64, 접두사 없이) */
+export interface ImageInput { mediaType: 'image/png' | 'image/jpeg' | 'image/webp'; base64: string }
+
+/** 코드 펜스를 벗겨 JSON으로 읽는다. 형식이 틀리면 ParseError → 다음 제공자로 */
+export function parseJsonObject(raw: string): unknown {
+  let s = raw.trim();
+  if (s.startsWith('```')) s = s.replace(/^```(?:json)?\s*/, '').replace(/```\s*$/, '');
+  try { return JSON.parse(s); } catch { throw new ParseError('정해진 JSON 형식이 아님'); }
+}
+
+/** 답 검사기에서 형식 오류를 알릴 때 */
+export function formatError(msg = '정해진 JSON 형식이 아님'): Error { return new ParseError(msg); }
+
 function parseJson(raw: string): AiJson {
   let s = raw.trim();
   if (s.startsWith('```')) s = s.replace(/^```(?:json)?\s*/, '').replace(/```\s*$/, '');
@@ -73,7 +90,7 @@ function parseJson(raw: string): AiJson {
   throw new ParseError('정해진 JSON 형식이 아님');
 }
 
-interface Call { system: string; user: string; fetchImpl: typeof fetch; retries: number }
+interface Call { system: string; user: string; fetchImpl: typeof fetch; retries: number; images: ImageInput[]; schema: AnswerSchema }
 
 interface AiText { text: string; model: string | null; usage: unknown }
 
@@ -98,9 +115,14 @@ async function callClaude(p: Provider, c: Call): Promise<AiText> {
       // Claude 안에서 거절 시 같은 회사의 다른 모델로 넘기는 서버 측 fallback
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: c.schema.json as Record<string, unknown> } },
       system: c.system,
-      messages: [{ role: 'user', content: c.user }],
+      messages: [{
+        role: 'user',
+        content: c.images.length
+          ? [...c.images.map(i => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: i.mediaType, data: i.base64 } })), { type: 'text' as const, text: c.user }]
+          : c.user,
+      }],
     });
     if (response.stop_reason === 'refusal') throw new RefusedError('refusal');
     return {
@@ -118,9 +140,17 @@ async function callClaude(p: Provider, c: Call): Promise<AiText> {
 async function callOpenAiCompatible(base: string, p: Provider, c: Call, strictSchema: boolean): Promise<AiText> {
   const body = await postJson(c.fetchImpl, `${base}/chat/completions`, { authorization: `Bearer ${p.apiKey}` }, {
     model: p.model,
-    messages: [{ role: 'system', content: c.system }, { role: 'user', content: c.user }],
+    messages: [
+      { role: 'system', content: c.system },
+      {
+        role: 'user',
+        content: c.images.length
+          ? [{ type: 'text', text: c.user }, ...c.images.map(i => ({ type: 'image_url', image_url: { url: `data:${i.mediaType};base64,${i.base64}` } }))]
+          : c.user,
+      },
+    ],
     response_format: strictSchema
-      ? { type: 'json_schema', json_schema: { name: 'answer', schema: OUTPUT_SCHEMA, strict: true } }
+      ? { type: 'json_schema', json_schema: { name: 'answer', schema: c.schema.json, strict: true } }
       : { type: 'json_object' },
   });
   const choice = (body.choices as { message?: { content?: string; refusal?: string } }[] | undefined)?.[0]?.message;
@@ -134,8 +164,8 @@ async function callGemini(p: Provider, c: Call): Promise<AiText> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent`;
   const body = await postJson(c.fetchImpl, url, { 'x-goog-api-key': p.apiKey }, {
     systemInstruction: { parts: [{ text: c.system }] },
-    contents: [{ role: 'user', parts: [{ text: c.user }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA },
+    contents: [{ role: 'user', parts: [...c.images.map(i => ({ inline_data: { mime_type: i.mediaType, data: i.base64 } })), { text: c.user }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: c.schema.gemini },
   });
   const cand = (body.candidates as { finishReason?: string; content?: { parts?: { text?: string }[] } }[] | undefined)?.[0];
   if (cand?.finishReason === 'SAFETY' || cand?.finishReason === 'PROHIBITED_CONTENT') throw new RefusedError('refusal');
@@ -155,8 +185,8 @@ function callOnce(p: Provider, c: Call): Promise<AiText> {
 
 export interface Attempt { provider: ProviderId; model: string; tries: number; error?: string }
 
-export interface ChainResult {
-  output: AiJson | null;
+export interface ChainResult<T = AiJson> {
+  output: T | null;
   provider: ProviderId | null;
   /** 체인에서 고른(요청한) 모델 */
   model: string | null;
@@ -175,15 +205,28 @@ export interface ChainResult {
 
 const redact = (msg: string, providers: Provider[]) => providers.reduce((m, p) => m.split(p.apiKey).join('<KEY>'), msg);
 
+export interface ChainOptions<T> {
+  providers?: Provider[];
+  fetchImpl?: typeof fetch;
+  retries?: number;
+  sleep?: (ms: number) => Promise<void>;
+  /** 함께 보낼 이미지. 기본은 없음(문장 답) */
+  images?: ImageInput[];
+  /** 답 형식. 기본은 문장 답(TEXT_SCHEMA) */
+  schema?: AnswerSchema;
+  /** 답 검사기. 형식이 틀리면 formatError()를 던진다 → 다음 제공자로 */
+  parse?: (raw: string) => T;
+}
+
 /** 제공자 순서대로 시도해 첫 번째로 형식이 맞는 JSON 답을 돌려준다. */
-export async function completeWithFallback(
-  system: string, user: string,
-  opts: { providers?: Provider[]; fetchImpl?: typeof fetch; retries?: number; sleep?: (ms: number) => Promise<void> } = {},
-): Promise<ChainResult> {
+export async function completeWithFallback<T = AiJson>(
+  system: string, user: string, opts: ChainOptions<T> = {},
+): Promise<ChainResult<T>> {
   const providers = opts.providers ?? configuredProviders();
   const retries = opts.retries ?? Number(process.env.AI_HTTP_RETRIES ?? 2);
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>(r => setTimeout(r, ms)));
-  const call: Call = { system, user, fetchImpl: opts.fetchImpl ?? fetch, retries };
+  const call: Call = { system, user, fetchImpl: opts.fetchImpl ?? fetch, retries, images: opts.images ?? [], schema: opts.schema ?? TEXT_SCHEMA };
+  const parse = opts.parse ?? (parseJson as unknown as (raw: string) => T);
   const attempts: Attempt[] = [];
   let sawParseError = false;
 
@@ -194,7 +237,7 @@ export async function completeWithFallback(
       a.tries++;
       try {
         const res = await callOnce(p, call);
-        const output = parseJson(res.text);
+        const output = parse(res.text);
         return { output, provider: p.id, model: p.model, servedModel: res.model, usage: res.usage, refused: false, parseError: false, attempts };
       } catch (e) {
         if (e instanceof RefusedError) {
