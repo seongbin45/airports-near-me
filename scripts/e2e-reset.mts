@@ -11,6 +11,7 @@
 //      범위 안에 금요일이 없으면 이유를 남기고 실패한다(임의의 날짜로 대충 넘어가지 않는다).
 //
 // 필요한 env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEV_TEST_EMAIL, DEV_TEST_PASSWORD
+//             PROD_SUPABASE_URL — 운영 프로젝트 URL. 같으면 즉시 중단한다 (없으면 이 검사만 건너뜀)
 //             (선택) E2E_PROJECT_REF — 보조 확인용
 //
 // `--check-only`를 붙이면 1) 표식 확인만 하고 끝낸다(개발 계정 자격증명 불필요).
@@ -23,7 +24,7 @@
 // 멈춰서 첫 실행이 영원히 성공할 수 없었다.
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-import { markerProblem } from '../lib/server/e2e-guard';
+import { markerProblem, sameProject } from '../lib/server/e2e-guard';
 
 const need = (k: string) => {
   const v = process.env[k];
@@ -49,7 +50,25 @@ const fail: (msg: string) => never = (msg) => { console.error(`중단: ${msg}`);
 /** 없으면 동기화·검사가 성립하지 않는 테이블. 나머지는 목록으로 알려만 준다. */
 const CRITICAL_TABLES = ['e2e_marker', 'regions', 'flight_schedules', 'profiles'];
 
-// ── 1) 이 DB가 테스트 전용인지 증명한다 (가장 먼저, 그리고 조회 오류도 중단 사유로 본다)
+// ── 0) 운영 프로젝트를 가리키고 있지 않은지 먼저 본다 (표식보다 앞이다)
+// 표식 테이블이 없는 이유가 "운영 프로젝트라서"일 수 있다. 그때 안내대로 표식을 만들면
+// **운영 DB에 표식을 심어 보호가 무력화된다** — 그래서 표식을 만들기 전에 여기서 막는다.
+// PROD_SUPABASE_URL이 없으면(시크릿 미설정) 이 검사는 건너뛰고 표식 검사가 계속 지킨다.
+const prodUrl = process.env.PROD_SUPABASE_URL;
+if (prodUrl) {
+  if (sameProject(url, prodUrl)) {
+    fail(
+      `E2E_SUPABASE_URL이 **운영 프로젝트**(${new URL(url).host})를 가리키고 있어요.\n` +
+      '  · 테스트 전용 프로젝트의 URL을 E2E_SUPABASE_URL 시크릿에 넣으세요.\n' +
+      '  · 이대로 두면 운영 DB의 계정·운항 스케줄을 덮어씁니다. 표식을 만들지 마세요 — 만들면 보호가 사라집니다.',
+    );
+  }
+  console.log(`운영 프로젝트(${new URL(prodUrl).host})와 다른 프로젝트입니다 — 진행합니다.`);
+} else {
+  console.log('PROD_SUPABASE_URL이 없어 운영 프로젝트 대조를 건너뜁니다 (표식 검사는 그대로 돕니다).');
+}
+
+// ── 1) 이 DB가 테스트 전용인지 증명한다 (조회 오류도 중단 사유로 본다)
 // PostgREST가 "테이블이 없다"고 할 때의 문구. 표식 테이블은 마이그레이션에 없다(운영에 생기면 안 되므로
 // 수동으로 만든다 — supabase/e2e-marker.sql). 그래서 "없음"과 "값이 다름"을 구분해 안내해야 한다.
 // 구분하지 않으면 "운영 프로젝트인가?"와 "표식 만들기를 잊었나?"를 알 수 없어 왕복이 늘어난다(실제로 그랬다).
